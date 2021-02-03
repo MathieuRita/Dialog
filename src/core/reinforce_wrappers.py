@@ -221,11 +221,7 @@ class RnnSenderReinforce(nn.Module):
 
 
             step_logits = F.log_softmax(self.hidden_to_output(h_t), dim=1)
-            # ATTENTION ENLEVER LAJOUT
-            #if step==0:
-            #    step_logits = F.log_softmax(self.hidden_to_output(h_t), dim=1)-1000*torch.cat((torch.zeros((h_t.size(0),1)),torch.ones((h_t.size(0),int(self.vocab_size/2))),torch.zeros((h_t.size(0),int(self.vocab_size/2)))),dim=1).to("cuda")
-            #else:
-            #    step_logits = F.log_softmax(self.hidden_to_output(h_t), dim=1)-1000*torch.cat((torch.zeros((h_t.size(0),1)),torch.zeros((h_t.size(0),int(self.vocab_size/2))),torch.ones((h_t.size(0),int(self.vocab_size/2)))),dim=1).to("cuda")
+
             distr = Categorical(logits=step_logits)
             entropy.append(distr.entropy())
 
@@ -442,94 +438,167 @@ class RnnReceiverImpatientCompositionality(nn.Module):
 
         return sequence, slogits, entropy
 
-#class RnnReceiverImpatient2(nn.Module):
+class AgentBaseline(nn.Module):
 
-#    """
-#    Impatient listener
-#    """
+    """
+    AgentBaseline is composed of a couple of modalities:
+        - sender
+        - receiver
+    In AgentBaseline, Sender and Receiver parts are independent
+    """
 
-#    def __init__(self, agent, vocab_size, embed_dim, hidden_size, max_len, n_features, num_layers=1, cell='rnn'):
-#        """
-#        :param agent: the agent to be wrapped
-#        :param vocab_size: the communication vocabulary size
-#        :param embed_dim: the size of the embedding used to embed the output symbols
-#        :param hidden_size: the RNN cell's hidden state size
-#        :param max_len: maximal length of the output messages
-#        :param cell: type of the cell used (rnn, gru, lstm)
-#        :param force_eos: if set to True, each message is extended by an EOS symbol. To ensure that no message goes
-#        beyond `max_len`, Sender only generates `max_len - 1` symbols from an RNN cell and appends EOS.
-#        """
-#        super(RnnReceiverImpatient, self).__init__()
-#        self.agent = agent
-#
-#        self.max_len = max_len
-#
-#        self.hidden_to_output = [nn.Linear(hidden_size, n_features).to("cuda")]*self.max_len
-#        self.embedding = nn.Embedding(vocab_size, embed_dim)
-#        self.sos_embedding = nn.Parameter(torch.zeros(embed_dim))
-#        self.embed_dim = embed_dim
-#        self.vocab_size = vocab_size
-#        self.num_layers = num_layers
-#        self.cells = None
+    def __init__(self, receiver, sender):
+        super(Agent, self).__init__()
 
-#        cell = cell.lower()
-#        cell_types = {'rnn': nn.RNNCell, 'gru': nn.GRUCell, 'lstm': nn.LSTMCell}
-#
-#        if cell not in cell_types:
-#            raise ValueError(f"Unknown RNN Cell: {cell}")
+        self.receiver=receiver
+        self.sender=sender
 
-#        cell_type = cell_types[cell]
-#        self.cells = nn.ModuleList([
-#            cell_type(input_size=embed_dim, hidden_size=hidden_size) if i == 0 else \
-#            cell_type(input_size=hidden_size, hidden_size=hidden_size) for i in range(self.num_layers)])
+    def forward(self, message, input=None, lengths=None):
 
-#        self.reset_parameters()
+        raise NotImplementedError
 
-#    def reset_parameters(self):
-#        nn.init.normal_(self.sos_embedding, 0.0, 0.01)
-#
-#    def forward(self, message, input, message_lengths=0):
-#        from_sym_to_onehot=torch.eye(self.vocab_size,self.vocab_size).to("cuda")
-#        prev_hidden = [self.agent(from_sym_to_onehot[message[:,0]],input)]
-#        prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers - 1)])
+class DialogReinforce(nn.Module):
 
-#        prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers)]  # only used for LSTM
+    """
+    DialogReinforce implements the Dialog game
+    """
 
-#        input = torch.stack([self.sos_embedding] * from_sym_to_onehot[message[0]].size(0))
+    def __init__(self,
+                 Agent_1,
+                 Agent_2,
+                 loss,
+                 sender_entropy_coeff,
+                 receiver_entropy_coeff,
+                 loss_weights=[0.5,0.5],
+                 length_cost=0.0,
+                 unigram_penalty=0.0,
+                 reg=False):
+        """
 
-#        sequence = []
-#        logits = []
-#        entropy = []
+        """
+        super(DialogReinforce, self).__init__()
+        self.agent_1 = Agent_1
+        self.agent_2 = Agent_2
+        self.sender_entropy_coeff = sender_entropy_coeff
+        self.receiver_entropy_coeff = receiver_entropy_coeff
+        self.loss = loss
+        self.loss_weights = loss_weights
+        self.length_cost = length_cost
+        self.unigram_penalty = unigram_penalty
 
-#        for step in range(self.max_len):
-#            input = torch.stack([self.sos_embedding] * from_sym_to_onehot[message[:,step]].size(0))
-#            for i, layer in enumerate(self.cells):
-#                if isinstance(layer, nn.LSTMCell):
-#                    h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
-#                    prev_c[i] = c_t
-#                else:
-#                    h_t = layer(input, prev_hidden[i])
-#                prev_hidden[i] = h_t
-#                input = h_t
+        self.mean_baseline = defaultdict(float)
+        self.n_points = defaultdict(float)
+        self.reg=reg
 
-#            step_logits = F.log_softmax(self.hidden_to_output[step](h_t), dim=1)
-#            distr = Categorical(logits=step_logits)
-#            entropy.append(distr.entropy())
+    def forward(self, sender_input, labels, receiver_input=None):
 
-#            if self.training:
-#                x = distr.sample()
-#            else:
-#                x = step_logits.argmax(dim=1)
-#            logits.append(distr.log_prob(x))
-#            sequence.append(step_logits)
+        "1. Agent_1 -> Agent_2"
 
-#        sequence = torch.stack(sequence).permute(1, 0, 2)
-#        logits = torch.stack(logits).permute(1, 0)
-#        entropy = torch.stack(entropy).permute(1, 0)
+        message_1, log_prob_s_1, entropy_s_1 = self.agent_1.sender(sender_input)
+        message_lengths_1 = find_lengths(message_1)
 
-#        return sequence, logits, entropy
+        receiver_output_1, log_prob_r_1, entropy_r_1 = self.agent_2.receiver(message_1, receiver_input_1, message_lengths_1)
 
+        loss_1, rest_1 = self.loss(sender_input_1, message_1, receiver_input_1, receiver_output_1, labels_1)
 
+        # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
+        effective_entropy_s_1 = torch.zeros_like(entropy_r_1)
+
+        # the log prob of the choices made by S before and including the eos symbol - again, we don't
+        # care about the rest
+        effective_log_prob_s_1 = torch.zeros_like(log_prob_r_1)
+
+        for i in range(message_1.size(1)):
+            not_eosed_1 = (i < message_lengths_1).float()
+            effective_entropy_s_1 += entropy_s_1[:, i] * not_eosed_1
+            effective_log_prob_s_1 += log_prob_s_1[:, i] * not_eosed_1
+        effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
+
+        weighted_entropy_1 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
+                entropy_r_1.mean() * self.receiver_entropy_coeff
+
+        log_prob_1 = effective_log_prob_s_1 + log_prob_r_1
+
+        length_loss_1 = message_lengths_1.float() * self.length_cost
+
+        policy_length_loss_1 = ((length_loss_1.float() - self.mean_baseline['length_1']) * effective_log_prob_s_1).mean()
+        policy_loss_1 = ((loss_1.detach() - self.mean_baseline['loss_1']) * log_prob_1).mean()
+
+        optimized_loss_1 = policy_length_loss_1 + policy_loss_1 - weighted_entropy_1
+
+        # if the receiver is deterministic/differentiable, we apply the actual loss
+        optimized_loss_1 += loss_1.mean()
+
+        if self.training:
+            self.update_baseline('loss_1', loss_1)
+            self.update_baseline('length_1', length_loss_1)
+
+        for k, v in rest.items():
+            rest[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest['loss_1'] = optimized_loss_1.detach().item()
+        rest['sender_entropy_1'] = entropy_s_1.mean().item()
+        rest['receiver_entropy_1'] = entropy_r_1.mean().item()
+        rest['original_loss_1'] = loss_1.mean().item()
+        rest['mean_length_1'] = message_lengths_1.float().mean().item()
+
+        "2. Agent_2 -> Agent_1"
+
+        message_2, log_prob_s_2, entropy_s_2 = self.agent_2.sender(sender_input_2)
+        message_lengths_2 = find_lengths(message_2)
+
+        receiver_output_2, log_prob_r_2, entropy_r_2 = self.agent_1.receiver(message_2, receiver_input_2, message_lengths_2)
+
+        loss_2, rest_2 = self.loss(sender_input_2, message_2, receiver_input_2, receiver_output_2, labels_2)
+
+        # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
+        effective_entropy_s_2 = torch.zeros_like(entropy_r_2)
+
+        # the log prob of the choices made by S before and including the eos symbol - again, we don't
+        # care about the rest
+        effective_log_prob_s_2 = torch.zeros_like(log_prob_r_2)
+
+        for i in range(message_2.size(1)):
+            not_eosed_2 = (i < message_lengths_2).float()
+            effective_entropy_s_2 += entropy_s_2[:, i] * not_eosed_2
+            effective_log_prob_s_2 += log_prob_s_2[:, i] * not_eosed_2
+        effective_entropy_s_2 = effective_entropy_s_2 / message_lengths_2.float()
+
+        weighted_entropy_2 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
+                entropy_r_2.mean() * self.receiver_entropy_coeff
+
+        log_prob_2 = effective_log_prob_s_2 + log_prob_r_2
+
+        length_loss_2 = message_lengths_2.float() * self.length_cost
+
+        policy_length_loss_2 = ((length_loss_2.float() - self.mean_baseline['length_2']) * effective_log_prob_s_2).mean()
+        policy_loss_2 = ((loss_2.detach() - self.mean_baseline['loss_2']) * log_prob_2).mean()
+
+        optimized_loss_2 = policy_length_loss_2 + policy_loss_2 - weighted_entropy_2
+
+        # if the receiver is deterministic/differentiable, we apply the actual loss
+        optimized_loss_2 += loss_2.mean()
+
+        if self.training:
+            self.update_baseline('loss_2', loss_2)
+            self.update_baseline('length_2', length_loss_2)
+
+        for k, v in rest.items():
+            rest[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest['loss_2'] = optimized_loss_2.detach().item()
+        rest['sender_entropy_2'] = entropy_s_2.mean().item()
+        rest['receiver_entropy_2'] = entropy_r_2.mean().item()
+        rest['original_loss_2'] = loss_2.mean().item()
+        rest['mean_length_2'] = message_lengths_2.float().mean().item()
+
+        "3. Average loss"
+
+        optimized_loss = self.loss_weights[0]*optimized_loss_1 + self.loss_weights[1]*optimized_loss_2
+
+        return optimized_loss, rest
+
+    def update_baseline(self, name, value):
+        self.n_points[name] += 1
+        self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
 
 class SenderReceiverRnnReinforce(nn.Module):
     """

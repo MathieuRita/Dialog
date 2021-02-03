@@ -15,6 +15,9 @@ from egg.zoo.channel.archs import Sender, Receiver
 from egg.core.reinforce_wrappers import RnnReceiverImpatient
 from egg.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from egg.core.util import dump_sender_receiver_impatient
+#Dialog
+from egg.core.reinforce_wrappers import  AgentBaseline,DialogReinforce
+from egg.core.util import dump_sender_receiver_dialog
 
 
 def get_params(params):
@@ -82,6 +85,8 @@ def get_params(params):
                         help='Print message ?')
     parser.add_argument('--reg', type=bool, default=False,
                         help='Add regularization ?')
+    parser.add_argument('--dialog', type=bool, default=True,
+                        help='if dialog game')
 
     args = core.init(parser, params)
 
@@ -123,8 +128,7 @@ def loss_impatient(sender_input, _message, message_length, _receiver_input, rece
 
     # 2. coef applies weights on each position. By default it is equal
     coef=(1/message_length.to(float)).repeat(_message.size(1),1).transpose(1,0) # useless ?
-    coef2=coef # useless ?
-    len_mask.mul_((coef2)) # useless ?
+    len_mask.mul_((coef))
     len_mask.mul_((1/len_mask.sum(1)).repeat((_message.size(1),1)).transpose(1,0))
 
     # Test: change positional wieghts
@@ -148,53 +152,6 @@ def loss_impatient(sender_input, _message, message_length, _receiver_input, rece
 
     return loss, {'acc': acc}, crible_acc
 
-#def loss_impatient2(sender_input, _message, message_length, _receiver_input, receiver_output, _labels):
-
-#    to_onehot=torch.eye(_message.size(1)).to("cuda")
-#    to_onehot=torch.cat((to_onehot,torch.zeros((1,_message.size(1))).to("cuda")),0)
-#    len_mask=[]
-#    len_mask2=[]
-#    for i in range(message_length.size(0)):
-#      len_mask.append(to_onehot[message_length[i]])
-#      len_mask2.append(to_onehot[message_length[i]-1])
-#    len_mask=torch.stack(len_mask,dim=0)
-#    len_mask2=torch.stack(len_mask2,dim=0)
-
-#    coef=(1/message_length.to(float)).repeat(_message.size(1),1).transpose(1,0)
-#    coef2=coef*torch.arange(_message.size(1),0,-1).repeat(_message.size(0),1).to("cuda")
-
-#    len_mask=torch.cumsum(len_mask,dim=1)
-#    len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
-
-#    len_mask.mul_((coef2))
-#    len_mask.mul_((1/len_mask.sum(1)).repeat((_message.size(1),1)).transpose(1,0))
-
-#    crible_acc=torch.zeros(size=_message.size()).to("cuda")
-#    crible_loss=torch.zeros(size=_message.size()).to("cuda")
-
-#    for i in range(receiver_output.size(1)):
-#      crible_acc[:,i].add_((receiver_output[:,i,:].argmax(dim=1) == sender_input.argmax(dim=1)).detach().float())
-#      crible_loss[:,i].add_(F.cross_entropy(receiver_output[:,i,:], sender_input.argmax(dim=1), reduction="none"))
-
-#    acc=crible_acc*len_mask
-#    loss=crible_loss*len_mask
-
-#    acc2=crible_acc*len_mask2
-#    loss2=crible_loss*len_mask2
-#    loss2=torch.cumsum(loss2,dim=1)
-#    acc2=torch.cumsum(acc2,dim=1)
-
-#    loss.add_(loss2)
-#    acc.add_(acc2)
-
-    # Moyenne
-#    loss.mul_(torch.ones(len_mask.size()).to("cuda")*(1/crible_loss.size(1)))
-#    acc.mul_(torch.ones(len_mask.size()).to("cuda")*(1/crible_loss.size(1)))
-
-#    acc = acc.sum(1)
-#    loss= loss.sum(1)
-
-#    return loss, {'acc': acc}, crible_acc
 
 def dump(game, n_features, device, gs_mode, epoch):
     # tiny "dataset"
@@ -224,11 +181,70 @@ def dump(game, n_features, device, gs_mode, epoch):
 
     unif_acc /= n_features
 
-    #print(f'Mean accuracy wrt uniform distribution is {unif_acc}')
-    #print(f'Mean accuracy wrt powerlaw distribution is {powerlaw_acc}')
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
 
     return acc_vec, messages
+
+def dump_dialog(game, n_features, device, gs_mode, epoch):
+    # tiny "dataset"
+    dataset = [[torch.eye(n_features).to(device), None]]
+
+    sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_1, \
+    sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_2, _ = \
+        core.dump_sender_receiver_dialog(game, dataset, gs=gs_mode, device=device, variable_length=True)
+
+
+    print("Language 1 (Agent 1 -> Agent 2)")
+
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_1=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_1):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_1[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%50==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    print("Language 2 (Agent 2 -> Agent 1)")
+
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_2=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_2):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_2[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%50==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    return acc_vec_1, messages_1, acc_vec_2, messages_2
 
 def dump_impatient(game, n_features, device, gs_mode,epoch):
     # tiny "dataset"
@@ -277,20 +293,6 @@ def main(params):
         probs = np.ones(opts.n_features)
     elif opts.probs == 'powerlaw':
         probs = 1 / np.arange(1, opts.n_features+1, dtype=np.float32)
-    #elif opts.probs == "creneau":
-    #    ones = np.ones(int(opts.n_features/2))
-    #    tens = 10*np.ones(opts.n_features-int(opts.n_features/2))
-    #    probs = np.concatenate((tens,ones),axis=0)
-    #elif opts.probs == "toy":
-    #    fives = 5*np.ones(int(opts.n_features/10))
-    #    ones = np.ones(opts.n_features-int(opts.n_features/10))
-    #    probs = np.concatenate((fives,ones),axis=0)
-    #elif opts.probs == "escalier":
-    #    ones = np.ones(int(opts.n_features/4))
-    #    tens = 10*np.ones(int(opts.n_features/4))
-    #    huns = 100*np.ones(int(opts.n_features/4))
-    #    thous = 1000*np.ones(opts.n_features-3*int(opts.n_features/4))
-    #    probs = np.concatenate((thous,huns,tens,ones),axis=0)
     else:
         probs = np.array([float(x) for x in opts.probs.split(',')], dtype=np.float32)
 
@@ -304,55 +306,93 @@ def main(params):
     # single batches with 1s on the diag
     test_loader = UniformLoader(opts.n_features)
 
-    if opts.sender_cell == 'transformer':
-        sender = Sender(n_features=opts.n_features, n_hidden=opts.sender_embedding)
-        sender = core.TransformerSenderReinforce(agent=sender, vocab_size=opts.vocab_size,
-                                                 embed_dim=opts.sender_embedding, max_len=opts.max_len,
-                                                 num_layers=opts.sender_num_layers, num_heads=opts.sender_num_heads,
-                                                 hidden_size=opts.sender_hidden,
-                                                 force_eos=opts.force_eos,
-                                                 generate_style=opts.sender_generate_style,
-                                                 causal=opts.causal_sender)
-    else:
-        sender = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+    if not opts.dialog:
+        if opts.sender_cell == 'transformer':
+            sender = Sender(n_features=opts.n_features, n_hidden=opts.sender_embedding)
+            sender = core.TransformerSenderReinforce(agent=sender, vocab_size=opts.vocab_size,
+                                                     embed_dim=opts.sender_embedding, max_len=opts.max_len,
+                                                     num_layers=opts.sender_num_layers, num_heads=opts.sender_num_heads,
+                                                     hidden_size=opts.sender_hidden,
+                                                     force_eos=opts.force_eos,
+                                                     generate_style=opts.sender_generate_style,
+                                                     causal=opts.causal_sender)
+        else:
+            sender = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
 
-        sender = core.RnnSenderReinforce(sender,
+            sender = core.RnnSenderReinforce(sender,
+                                       opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                       cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                       force_eos=force_eos)
+        if opts.receiver_cell == 'transformer':
+            receiver = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_embedding)
+            receiver = core.TransformerReceiverDeterministic(receiver, opts.vocab_size, opts.max_len,
+                                                             opts.receiver_embedding, opts.receiver_num_heads, opts.receiver_hidden,
+                                                             opts.receiver_num_layers, causal=opts.causal_receiver)
+        else:
+
+            if not opts.impatient:
+              receiver = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+              receiver = core.RnnReceiverDeterministic(receiver, opts.vocab_size, opts.receiver_embedding,
+                                                     opts.receiver_hidden, cell=opts.receiver_cell,
+                                                     num_layers=opts.receiver_num_layers)
+            else:
+              receiver = Receiver(n_features=opts.receiver_hidden, n_hidden=opts.vocab_size)
+              # If impatient 1
+              receiver = RnnReceiverImpatient(receiver, opts.vocab_size, opts.receiver_embedding,
+                                                opts.receiver_hidden, cell=opts.receiver_cell,
+                                                num_layers=opts.receiver_num_layers, max_len=opts.max_len, n_features=opts.n_features)
+
+        if not opts.impatient:
+            game = core.SenderReceiverRnnReinforce(sender, receiver, loss, sender_entropy_coeff=opts.sender_entropy_coeff,
+                                                   receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                                   length_cost=opts.length_cost,unigram_penalty=opts.unigram_pen,reg=opts.reg)
+        else:
+            game = SenderImpatientReceiverRnnReinforce(sender, receiver, loss_impatient, sender_entropy_coeff=opts.sender_entropy_coeff,
+                                                       receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                                       length_cost=opts.length_cost,unigram_penalty=opts.unigram_pen,reg=opts.reg)
+
+    if opts.dialog:
+
+        "Agent 1"
+
+        sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+        sender_1 = core.RnnSenderReinforce(sender_1,
                                    opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
                                    cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
                                    force_eos=force_eos)
-    if opts.receiver_cell == 'transformer':
-        receiver = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_embedding)
-        receiver = core.TransformerReceiverDeterministic(receiver, opts.vocab_size, opts.max_len,
-                                                         opts.receiver_embedding, opts.receiver_num_heads, opts.receiver_hidden,
-                                                         opts.receiver_num_layers, causal=opts.causal_receiver)
-    else:
 
-        receiver = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+        receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+        receiver_1 = core.RnnReceiverDeterministic(receiver_1, opts.vocab_size, opts.receiver_embedding,
+                                               opts.receiver_hidden, cell=opts.receiver_cell,
+                                               num_layers=opts.receiver_num_layers)
 
-        if not opts.impatient:
-          receiver = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
-          receiver = core.RnnReceiverDeterministic(receiver, opts.vocab_size, opts.receiver_embedding,
-                                                 opts.receiver_hidden, cell=opts.receiver_cell,
-                                                 num_layers=opts.receiver_num_layers)
-        else:
-          receiver = Receiver(n_features=opts.receiver_hidden, n_hidden=opts.vocab_size)
-          # If impatient 1
-          receiver = RnnReceiverImpatient(receiver, opts.vocab_size, opts.receiver_embedding,
-                                            opts.receiver_hidden, cell=opts.receiver_cell,
-                                            num_layers=opts.receiver_num_layers, max_len=opts.max_len, n_features=opts.n_features)
-          # If impatient 2
-          #receiver = RnnReceiverImpatient2(receiver, opts.vocab_size, opts.receiver_embedding,
-        #                                         opts.receiver_hidden, cell=opts.receiver_cell,
-        #                                         num_layers=opts.receiver_num_layers, max_len=opts.max_len, n_features=opts.n_features)
+        agent_1=AgentBaseline(receiver = receiver_1, sender = sender_1)
 
-    if not opts.impatient:
-        game = core.SenderReceiverRnnReinforce(sender, receiver, loss, sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
-                                           length_cost=opts.length_cost,unigram_penalty=opts.unigram_pen,reg=opts.reg)
-    else:
-        game = SenderImpatientReceiverRnnReinforce(sender, receiver, loss_impatient, sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
-                                           length_cost=opts.length_cost,unigram_penalty=opts.unigram_pen,reg=opts.reg)
+        "Agent 2"
+
+        sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+        sender_2 = core.RnnSenderReinforce(sender_2,
+                                   opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                   cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                   force_eos=force_eos)
+
+        receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+        receiver_2 = core.RnnReceiverDeterministic(receiver_2, opts.vocab_size, opts.receiver_embedding,
+                                               opts.receiver_hidden, cell=opts.receiver_cell,
+                                               num_layers=opts.receiver_num_layers)
+
+        agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
+
+        game = DialogReinforce(Agent_1=agent_1,
+                               Agent_2=agent_2,
+                               loss=loss,
+                               sender_entropy_coeff=opts.sender_entropy_coeff,
+                               receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                               loss_weights=[0.5,0.5],
+                               length_cost=0.0,
+                               unigram_penalty=0.0,
+                               reg=False)
+
 
     optimizer = core.build_optimizer(game.parameters())
 
@@ -362,34 +402,44 @@ def main(params):
 
     for epoch in range(int(opts.n_epochs)):
 
-        print("Epoch: "+str(epoch))
-
-        if epoch%100==0:
-          trainer.optimizer.defaults["lr"]/=2
+        print("Epoch: {}".format(epoch))
 
         trainer.train(n_epochs=1)
         if opts.checkpoint_dir:
             trainer.save_checkpoint(name=f'{opts.name}_vocab{opts.vocab_size}_rs{opts.random_seed}_lr{opts.lr}_shid{opts.sender_hidden}_rhid{opts.receiver_hidden}_sentr{opts.sender_entropy_coeff}_reg{opts.length_cost}_max_len{opts.max_len}')
 
-        if not opts.impatient:
-            acc_vec,messages=dump(trainer.game, opts.n_features, device, False,epoch)
-        else:
-            acc_vec,messages=dump_impatient(trainer.game, opts.n_features, device, False,epoch)
+        if not opts.dialog:
+            if not opts.impatient:
+                acc_vec,messages=dump(trainer.game, opts.n_features, device, False,epoch)
+            else:
+                acc_vec,messages=dump_impatient(trainer.game, opts.n_features, device, False,epoch)
 
-        # ADDITION TO SAVE MESSAGES
-        all_messages=[]
-        for x in messages:
+        else:
+            acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
+
+        # Convert to numpy to save messages
+        all_messages_1=[]
+        for x in messages_1:
             x = x.cpu().numpy()
-            all_messages.append(x)
-        all_messages = np.asarray(all_messages)
+            all_messages_1.append(x)
+        all_messages_1 = np.asarray(all_messages_1)
+
+        all_messages_2=[]
+        for x in messages_2:
+            x = x.cpu().numpy()
+            all_messages_2.append(x)
+        all_messages_2 = np.asarray(all_messages_2)
 
         if epoch%50==0:
-            torch.save(sender.state_dict(), opts.dir_save+"/sender/sender_weights"+str(epoch)+".pth")
-            torch.save(receiver.state_dict(), opts.dir_save+"/receiver/receiver_weights"+str(epoch)+".pth")
-            #print(acc_vec)
+            torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
+            torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
+            torch.save(agent_2.sender.state_dict(), f"{opts.dir_save}/sender/agent_2_sender_weights_{epoch}.pth")
+            torch.save(agent_2.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_2_receiver_weights_{epoch}.pth")
 
-        np.save(opts.dir_save+'/messages/messages_'+str((epoch))+'.npy', all_messages)
-        np.save(opts.dir_save+'/accuracy/accuracy_'+str((epoch))+'.npy', acc_vec)
+        np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages)
+        np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec)
+        np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages)
+        np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec)
 
     core.close()
 

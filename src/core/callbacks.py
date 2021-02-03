@@ -9,7 +9,7 @@ import pathlib
 
 import torch
 
-from egg.core.util import get_summary_writer
+from src.core.util import get_summary_writer
 
 
 class Callback:

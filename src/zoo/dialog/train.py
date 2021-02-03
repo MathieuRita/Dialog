@@ -8,16 +8,16 @@ import argparse
 import numpy as np
 import torch.utils.data
 import torch.nn.functional as F
-import egg.core as core
-from egg.core import EarlyStopperAccuracy
-from egg.zoo.channel.features import OneHotLoader, UniformLoader
-from egg.zoo.channel.archs import Sender, Receiver
-from egg.core.reinforce_wrappers import RnnReceiverImpatient
-from egg.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
-from egg.core.util import dump_sender_receiver_impatient
+import src.core as core
+from src.core import EarlyStopperAccuracy
+from src.zoo.channel.features import OneHotLoader, UniformLoader
+from src.zoo.channel.archs import Sender, Receiver
+from src.core.reinforce_wrappers import RnnReceiverImpatient
+from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
+from src.core.util import dump_sender_receiver_impatient
 #Dialog
-from egg.core.reinforce_wrappers import  AgentBaseline,DialogReinforce
-from egg.core.util import dump_sender_receiver_dialog
+from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforce
+from src.core.util import dump_sender_receiver_dialog
 
 
 def get_params(params):

@@ -546,8 +546,10 @@ class TrainerDialogModel1:
     def __init__(
             self,
             game: torch.nn.Module,
-            optimizer_1: torch.optim.Optimizer,
-            optimizer_2: torch.optim.Optimizer,
+            optimizer_sender_1: torch.optim.Optimizer,
+            optimizer_sender_2: torch.optim.Optimizer,
+            optimizer_receiver_1: torch.optim.Optimizer,
+            optimizer_receiver_2: torch.optim.Optimizer,
             train_data: DataLoader,
             validation_data: Optional[DataLoader] = None,
             device: torch.device = None,
@@ -564,8 +566,10 @@ class TrainerDialogModel1:
         :param callbacks: A list of egg.core.Callback objects that can encapsulate monitoring or checkpointing
         """
         self.game = game
-        self.optimizer_1 = optimizer_1
-        self.optimizer_2 = optimizer_2
+        self.optimizer_sender_1 = optimizer_sender_1
+        self.optimizer_sender_2 = optimizer_sender_2
+        self.optimizer_receiver_1 = optimizer_receiver_1
+        self.optimizer_receiver_2 = optimizer_receiver_2
         self.train_data = train_data
         self.validation_data = validation_data
         common_opts = get_opts()
@@ -637,19 +641,31 @@ class TrainerDialogModel1:
         n_batches = 0
         self.game.train()
         for batch in self.train_data:
-            optimized_loss_1,optimized_loss_2, rest = self.game(*batch)
-            self.optimizer_1.zero_grad()
+            optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest = self.game(*batch)
             batch = move_to(batch, self.device)
             mean_rest = _add_dicts(mean_rest, rest)
-            optimized_loss_1.backward()
-            self.optimizer_1.step()
 
-            self.optimizer_2.zero_grad()
-            optimized_loss_2.backward()
-            self.optimizer_2.step()
+            self.optimizer_sender_1.zero_grad()
+            self.optimizer_receiver_1.zero_grad()
+            self.optimizer_receiver_2.zero_grad()
+            optimized_loss_11.backward()
+            optimized_loss_12.backward()
+            self.optimizer_sender_1.step()
+            self.optimizer_receiver_1.step()
+            self.optimizer_receiver_2.step()
+
+            self.optimizer_sender_2.zero_grad()
+            self.optimizer_receiver_1.zero_grad()
+            self.optimizer_receiver_2.zero_grad()
+            optimized_loss_21.backward()
+            optimized_loss_22.backward()
+            self.optimizer_sender_2.step()
+            self.optimizer_receiver_1.step()
+            self.optimizer_receiver_2.step()
+
 
             n_batches += 1
-            mean_loss += 0.5*(optimized_loss_1+optimized_loss_2)
+            mean_loss += 0.25*(optimized_loss_11+optimized_loss_12+optimized_loss_21+optimized_loss_22)
 
 
         mean_loss /= n_batches

@@ -666,8 +666,14 @@ class DialogReinforceModel1(nn.Module):
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_1 = torch.zeros_like(entropy_r_12)
+
+        # the log prob of the choices made by S before and including the eos symbol - again, we don't
+        # care about the rest
+        effective_log_prob_s_1 = torch.zeros_like(log_prob_r_12)
+
+
         for i in range(message_1.size(1)):
-            not_eosed_1 = (i < message_lengths_12).float()
+            not_eosed_1 = (i < message_lengths_1).float()
             effective_entropy_s_1 += entropy_s_1[:, i] * not_eosed_1
             effective_log_prob_s_1 += log_prob_s_1[:, i] * not_eosed_1
         effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
@@ -748,9 +754,9 @@ class DialogReinforceModel1(nn.Module):
 
         #message_21, log_prob_s_21, entropy_s_21 = message_2, log_prob_s_2, entropy_s_2
 
-        receiver_output_21, log_prob_r_21, entropy_r_21 = self.agent_1.receiver(message_21, receiver_input, message_lengths_21)
+        receiver_output_21, log_prob_r_21, entropy_r_21 = self.agent_1.receiver(message_2, receiver_input, message_lengths_2)
 
-        loss_21, rest_21 = self.loss(sender_input, message_21, receiver_input, receiver_output_21, labels)
+        loss_21, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21, labels)
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_2 = torch.zeros_like(entropy_r_21)
@@ -800,7 +806,7 @@ class DialogReinforceModel1(nn.Module):
 
         receiver_output_22, log_prob_r_22, entropy_r_22 = self.agent_1.receiver(message_2, receiver_input, message_lengths_2)
 
-        loss_22, rest_22 = self.loss(sender_input, message_22, receiver_input, receiver_output_22, labels)
+        loss_22, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22, labels)
 
 
         weighted_entropy_22 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
@@ -852,7 +858,7 @@ class DialogReinforceModel1(nn.Module):
         rest['acc']=self.loss_weights[0][0]*rest_11['acc'] + self.loss_weights[0][1]*rest_12['acc']+ \
                          self.loss_weights[1][0]*rest_21['acc'] + self.loss_weights[1][1]*rest_22['acc']
 
-        return optimized_loss_1, optimized_loss_2, rest
+        return optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest
 
     def update_baseline(self, name, value):
         self.n_points[name] += 1

@@ -292,14 +292,14 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
     powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
     powerlaw_probs /= powerlaw_probs.sum()
 
-    acc_vec_1=np.zeros(n_features)
+    acc_vec_11=np.zeros(n_features)
 
     for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_11):
         input_symbol = sender_input.argmax()
         output_symbol = receiver_output.argmax()
         acc = (input_symbol == output_symbol).float().item()
 
-        acc_vec_1[int(input_symbol)]=acc
+        acc_vec_11[int(input_symbol)]=acc
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
@@ -342,14 +342,14 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
     powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
     powerlaw_probs /= powerlaw_probs.sum()
 
-    acc_vec_1=np.zeros(n_features)
+    acc_vec_22=np.zeros(n_features)
 
     for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_22):
         input_symbol = sender_input.argmax()
         output_symbol = receiver_output.argmax()
         acc = (input_symbol == output_symbol).float().item()
 
-        acc_vec_1[int(input_symbol)]=acc
+        acc_vec_22[int(input_symbol)]=acc
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
@@ -594,7 +594,7 @@ def main(params):
             if opts.model=="baseline":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
             elif opts.model=="model_1":
-                dump_dialog_model_1(game, n_features, device, gs_mode, epoch)
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
 
         # Convert to numpy to save messages
         all_messages_1=[]

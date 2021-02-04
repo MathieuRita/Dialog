@@ -10,14 +10,15 @@ import torch.utils.data
 import torch.nn.functional as F
 import src.core as core
 from src.core import EarlyStopperAccuracy
-from src.zoo.channel.features import OneHotLoader, UniformLoader
-from src.zoo.channel.archs import Sender, Receiver
+from src.zoo.dialog.features import OneHotLoader, UniformLoader
+from src.zoo.dialog.archs import Sender, Receiver
 from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient
 #Dialog
 from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforce
 from src.core.util import dump_sender_receiver_dialog
+from src.core.trainers import TrainerDialog
 
 
 def get_params(params):
@@ -191,7 +192,7 @@ def dump_dialog(game, n_features, device, gs_mode, epoch):
 
     sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_1, \
     sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_2, _ = \
-        core.dump_sender_receiver_dialog(game, dataset, gs=gs_mode, device=device, variable_length=True)
+        dump_sender_receiver_dialog(game, dataset, gs=gs_mode, device=device, variable_length=True)
 
 
     print("Language 1 (Agent 1 -> Agent 2)")
@@ -394,9 +395,12 @@ def main(params):
                                reg=False)
 
 
-    optimizer = core.build_optimizer(game.parameters())
+    #optimizer = core.build_optimizer(game.parameters())
+    optimizer_1 = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.receiver.parameters()))
+    optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters()))
 
-    trainer = core.Trainer(game=game, optimizer=optimizer, train_data=train_loader,
+
+    trainer = TrainerDialog(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, train_data=train_loader,
                            validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
 
@@ -436,10 +440,10 @@ def main(params):
             torch.save(agent_2.sender.state_dict(), f"{opts.dir_save}/sender/agent_2_sender_weights_{epoch}.pth")
             torch.save(agent_2.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_2_receiver_weights_{epoch}.pth")
 
-        np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages)
-        np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec)
-        np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages)
-        np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec)
+        np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
+        np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
+        np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages_2)
+        np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec_2)
 
     core.close()
 

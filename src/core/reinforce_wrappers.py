@@ -448,7 +448,7 @@ class AgentBaseline(nn.Module):
     """
 
     def __init__(self, receiver, sender):
-        super(Agent, self).__init__()
+        super(AgentBaseline, self).__init__()
 
         self.receiver=receiver
         self.sender=sender
@@ -497,9 +497,9 @@ class DialogReinforce(nn.Module):
         message_1, log_prob_s_1, entropy_s_1 = self.agent_1.sender(sender_input)
         message_lengths_1 = find_lengths(message_1)
 
-        receiver_output_1, log_prob_r_1, entropy_r_1 = self.agent_2.receiver(message_1, receiver_input_1, message_lengths_1)
+        receiver_output_1, log_prob_r_1, entropy_r_1 = self.agent_2.receiver(message_1, receiver_input, message_lengths_1)
 
-        loss_1, rest_1 = self.loss(sender_input_1, message_1, receiver_input_1, receiver_output_1, labels_1)
+        loss_1, rest_1 = self.loss(sender_input, message_1, receiver_input, receiver_output_1, labels)
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_1 = torch.zeros_like(entropy_r_1)
@@ -533,22 +533,24 @@ class DialogReinforce(nn.Module):
             self.update_baseline('loss_1', loss_1)
             self.update_baseline('length_1', length_loss_1)
 
-        for k, v in rest.items():
-            rest[k] = v.mean().item() if hasattr(v, 'mean') else v
-        rest['loss_1'] = optimized_loss_1.detach().item()
-        rest['sender_entropy_1'] = entropy_s_1.mean().item()
-        rest['receiver_entropy_1'] = entropy_r_1.mean().item()
-        rest['original_loss_1'] = loss_1.mean().item()
-        rest['mean_length_1'] = message_lengths_1.float().mean().item()
+        for k, v in rest_1.items():
+            rest_1[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest_1['loss'] = optimized_loss_1.detach().item()
+        rest_1['sender_entropy'] = entropy_s_1.mean().item()
+        rest_1['receiver_entropy'] = entropy_r_1.mean().item()
+        rest_1['original_loss'] = loss_1.mean().item()
+        rest_1['mean_length'] = message_lengths_1.float().mean().item()
+        rest['acc']=self.loss_weights[0]*rest_1['acc'] + self.loss_weights[1]* rest_2['acc']
+
 
         "2. Agent_2 -> Agent_1"
 
-        message_2, log_prob_s_2, entropy_s_2 = self.agent_2.sender(sender_input_2)
+        message_2, log_prob_s_2, entropy_s_2 = self.agent_2.sender(sender_input)
         message_lengths_2 = find_lengths(message_2)
 
-        receiver_output_2, log_prob_r_2, entropy_r_2 = self.agent_1.receiver(message_2, receiver_input_2, message_lengths_2)
+        receiver_output_2, log_prob_r_2, entropy_r_2 = self.agent_1.receiver(message_2, receiver_input, message_lengths_2)
 
-        loss_2, rest_2 = self.loss(sender_input_2, message_2, receiver_input_2, receiver_output_2, labels_2)
+        loss_2, rest_2 = self.loss(sender_input, message_2, receiver_input, receiver_output_2, labels)
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_2 = torch.zeros_like(entropy_r_2)
@@ -582,19 +584,26 @@ class DialogReinforce(nn.Module):
             self.update_baseline('loss_2', loss_2)
             self.update_baseline('length_2', length_loss_2)
 
-        for k, v in rest.items():
-            rest[k] = v.mean().item() if hasattr(v, 'mean') else v
-        rest['loss_2'] = optimized_loss_2.detach().item()
-        rest['sender_entropy_2'] = entropy_s_2.mean().item()
-        rest['receiver_entropy_2'] = entropy_r_2.mean().item()
-        rest['original_loss_2'] = loss_2.mean().item()
-        rest['mean_length_2'] = message_lengths_2.float().mean().item()
+        for k, v in rest_2.items():
+            rest_2[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest_2['loss'] = optimized_loss_2.detach().item()
+        rest_2['sender_entropy'] = entropy_s_2.mean().item()
+        rest_2['receiver_entropy'] = entropy_r_2.mean().item()
+        rest_2['original_loss'] = loss_2.mean().item()
+        rest_2['mean_length'] = message_lengths_2.float().mean().item()
 
         "3. Average loss"
 
         optimized_loss = self.loss_weights[0]*optimized_loss_1 + self.loss_weights[1]*optimized_loss_2
 
-        return optimized_loss, rest
+        rest={}
+        rest['loss']=self.loss_weights[0]*rest_1['loss'] + self.loss_weights[1]* rest_2['loss']
+        rest['sender_entropy']=self.loss_weights[0]*rest_1['sender_entropy'] + self.loss_weights[1]* rest_2['sender_entropy']
+        rest['receiver_entropy']=self.loss_weights[0]*rest_1['receiver_entropy'] + self.loss_weights[1]* rest_2['receiver_entropy']
+        rest['original_loss']=self.loss_weights[0]*rest_1['original_loss'] + self.loss_weights[1]* rest_2['original_loss']
+        rest['mean_length']=self.loss_weights[0]*rest_1['mean_length'] + self.loss_weights[1]* rest_2['mean_length']
+
+        return optimized_loss_1, optimized_loss_2, rest
 
     def update_baseline(self, name, value):
         self.n_points[name] += 1

@@ -486,14 +486,14 @@ class DialogReinforceBaseline(nn.Module):
         self.loss_weights = loss_weights
         self.length_cost = length_cost
         self.unigram_penalty = unigram_penalty
-
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.reg=reg
+        self.device=device
 
     def forward(self, sender_input, labels, receiver_input=None):
 
-        sender_input=sender_input.to(device)
+        sender_input=sender_input.to(self.device)
 
         "1. Agent_1 -> Agent_2"
 

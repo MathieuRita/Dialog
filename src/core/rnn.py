@@ -54,7 +54,7 @@ class RnnEncoder(nn.Module):
             lengths = find_lengths(message)
 
         packed = nn.utils.rnn.pack_padded_sequence(
-            emb, lengths, batch_first=True, enforce_sorted=False)
+            emb, lengths.cpu(), batch_first=True, enforce_sorted=False)
         _, rnn_hidden = self.cell(packed)
 
         if isinstance(self.cell, nn.LSTM):
@@ -67,7 +67,7 @@ class RnnEncoder(nn.Module):
 class RnnEncoderImpatient(nn.Module):
     """
     RNN implementation that returns all the intermediate input states (used for Impatient Listener).
-    
+
     Feeds a sequence into an RNN (vanilla RNN, GRU, LSTM) cell and returns a vector representation
     of it for each reading position: it returns the hidden states of all the intermediate positions.
     Assumes that the eos token has the id equal to 0.

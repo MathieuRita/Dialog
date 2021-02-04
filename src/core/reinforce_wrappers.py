@@ -632,7 +632,7 @@ class DialogReinforceModel1(nn.Module):
         """
 
         """
-        super(DialogReinforce, self).__init__()
+        super(DialogReinforceModel1, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
         self.sender_entropy_coeff = sender_entropy_coeff
@@ -860,21 +860,21 @@ class DialogReinforceModel1(nn.Module):
         optimized_loss_1 = self.loss_weights[0][0]*optimized_loss_11 + self.loss_weights[0][1]*optimized_loss_12
         optimized_loss_2 = self.loss_weights[1][0]*optimized_loss_21 + self.loss_weights[1][1]*optimized_loss_22
 
-        optimized_loss = self.loss_weights[0][0]*optimized_loss_11 + self.loss_weights[0][1]*optimized_loss_12 \
+        optimized_loss = self.loss_weights[0][0]*optimized_loss_11 + self.loss_weights[0][1]*optimized_loss_12+ \
                          self.loss_weights[1][0]*optimized_loss_21 + self.loss_weights[1][1]*optimized_loss_22
 
         rest={}
-        rest['loss']=self.loss_weights[0][0]*rest_11['loss'] + self.loss_weights[0][1]*rest_12['loss'] \
+        rest['loss']=self.loss_weights[0][0]*rest_11['loss'] + self.loss_weights[0][1]*rest_12['loss']+ \
                          self.loss_weights[1][0]*rest_21['loss'] + self.loss_weights[1][1]*rest_22['loss']
-        rest['sender_entropy']=self.loss_weights[0][0]*rest_11['sender_entropy'] + self.loss_weights[0][1]*rest_12['sender_entropy'] \
+        rest['sender_entropy']=self.loss_weights[0][0]*rest_11['sender_entropy'] + self.loss_weights[0][1]*rest_12['sender_entropy']+ \
                                 self.loss_weights[1][0]*rest_21['sender_entropy'] + self.loss_weights[1][1]*rest_22['sender_entropy']
-        rest['receiver_entropy']=self.loss_weights[0][0]*rest_11['receiver_entropy'] + self.loss_weights[0][1]*rest_12['receiver_entropy'] \
+        rest['receiver_entropy']=self.loss_weights[0][0]*rest_11['receiver_entropy'] + self.loss_weights[0][1]*rest_12['receiver_entropy']+ \
                                  self.loss_weights[1][0]*rest_21['receiver_entropy'] + self.loss_weights[1][1]*rest_22['receiver_entropy']
-        rest['original_loss']=self.loss_weights[0][0]*rest_11['original_loss'] + self.loss_weights[0][1]*rest_12['original_loss'] \
+        rest['original_loss']=self.loss_weights[0][0]*rest_11['original_loss'] + self.loss_weights[0][1]*rest_12['original_loss']+ \
                                 self.loss_weights[1][0]*rest_21['original_loss'] + self.loss_weights[1][1]*rest_22['original_loss']
-        rest['mean_length']=self.loss_weights[0][0]*rest_11['mean_length'] + self.loss_weights[0][1]*rest_12['mean_length'] \
+        rest['mean_length']=self.loss_weights[0][0]*rest_11['mean_length'] + self.loss_weights[0][1]*rest_12['mean_length']+ \
                             self.loss_weights[1][0]*rest_21['mean_length'] + self.loss_weights[1][1]*rest_22['mean_length']
-        rest['acc']=self.loss_weights[0][0]*rest_11['acc'] + self.loss_weights[0][1]*rest_12['acc'] \
+        rest['acc']=self.loss_weights[0][0]*rest_11['acc'] + self.loss_weights[0][1]*rest_12['acc']+ \
                          self.loss_weights[1][0]*rest_21['acc'] + self.loss_weights[1][1]*rest_22['acc']
 
         return optimized_loss_1, optimized_loss_2, rest

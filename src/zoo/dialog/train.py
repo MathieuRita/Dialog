@@ -449,7 +449,6 @@ def main(params):
                                            loss=loss,
                                            sender_entropy_coeff=opts.sender_entropy_coeff,
                                            receiver_entropy_coeff=opts.receiver_entropy_coeff,
-                                           loss_weights=[0.5,0.5],
                                            length_cost=0.0,
                                            unigram_penalty=0.0,
                                            reg=False)

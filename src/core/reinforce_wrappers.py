@@ -804,7 +804,7 @@ class DialogReinforceModel1(nn.Module):
 
         #message_lengths_22 = find_lengths(message_22)
 
-        receiver_output_22, log_prob_r_22, entropy_r_22 = self.agent_1.receiver(message_2, receiver_input, message_lengths_2)
+        receiver_output_22, log_prob_r_22, entropy_r_22 = self.agent_2.receiver(message_2, receiver_input, message_lengths_2)
 
         loss_22, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22, labels)
 

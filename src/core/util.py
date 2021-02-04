@@ -1350,11 +1350,11 @@ def dump_sender_receiver_dialog_model_1(game: torch.nn.Module,
                         messages_1.append(message_1[i, :message_end_1 + 1])
 
                     if gs:
-                        receiver_outputs_11.append(output[i, message_end_1, ...])
-                        receiver_outputs_12.append(output[i, message_end_1, ...])
+                        receiver_outputs_11.append(output_11[i, message_end_1, ...])
+                        receiver_outputs_12.append(output_12[i, message_end_1, ...])
                     else:
-                        receiver_outputs_11.append(output_1[i, ...])
-                        receiver_outputs_12.append(output_1[i, ...])
+                        receiver_outputs_11.append(output_11[i, ...])
+                        receiver_outputs_12.append(output_12[i, ...])
 
                 for i in range(message_2.size(0)):
                     eos_positions_2 = (message_2[i, :] == 0).nonzero()

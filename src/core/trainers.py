@@ -395,8 +395,8 @@ class TrainerDialog:
         :param callbacks: A list of egg.core.Callback objects that can encapsulate monitoring or checkpointing
         """
         self.game = game
-        self.optimizer_1 = optimizer
-        self.optimizer_2 = optimizer
+        self.optimizer_1 = optimizer_1
+        self.optimizer_2 = optimizer_2
         self.train_data = train_data
         self.validation_data = validation_data
         common_opts = get_opts()

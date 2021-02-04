@@ -402,7 +402,8 @@ def main(params):
                                            loss_weights=[0.5,0.5],
                                            length_cost=0.0,
                                            unigram_penalty=0.0,
-                                           reg=False)
+                                           reg=False,
+                                           device=device)
 
             optimizer_1 = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.receiver.parameters()))
             optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters()))

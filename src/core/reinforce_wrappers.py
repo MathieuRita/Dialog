@@ -469,6 +469,7 @@ class DialogReinforceBaseline(nn.Module):
                  loss,
                  sender_entropy_coeff,
                  receiver_entropy_coeff,
+                 device,
                  loss_weights=[0.5,0.5],
                  length_cost=0.0,
                  unigram_penalty=0.0,
@@ -491,6 +492,8 @@ class DialogReinforceBaseline(nn.Module):
         self.reg=reg
 
     def forward(self, sender_input, labels, receiver_input=None):
+
+        sender_input=sender_input.to(device)
 
         "1. Agent_1 -> Agent_2"
 

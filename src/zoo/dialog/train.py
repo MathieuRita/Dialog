@@ -86,8 +86,11 @@ def get_params(params):
                         help='Print message ?')
     parser.add_argument('--reg', type=bool, default=False,
                         help='Add regularization ?')
+    # Dialog
     parser.add_argument('--dialog', type=bool, default=True,
                         help='if dialog game')
+    parser.add_argument('--model', type=str, default="baseline",
+                        help='dialog agents model')
 
     args = core.init(parser, params)
 
@@ -352,56 +355,111 @@ def main(params):
                                                        receiver_entropy_coeff=opts.receiver_entropy_coeff,
                                                        length_cost=opts.length_cost,unigram_penalty=opts.unigram_pen,reg=opts.reg)
 
+        optimizer = core.build_optimizer(game.parameters())
+
+        trainer = Trainer(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, train_data=train_loader,
+                               validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
     if opts.dialog:
 
-        "Agent 1"
+        if opts.model=="baseline":
 
-        sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
-        sender_1 = core.RnnSenderReinforce(sender_1,
-                                   opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
-                                   cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
-                                   force_eos=force_eos)
+            "Agent 1"
 
-        receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
-        receiver_1 = core.RnnReceiverDeterministic(receiver_1, opts.vocab_size, opts.receiver_embedding,
-                                               opts.receiver_hidden, cell=opts.receiver_cell,
-                                               num_layers=opts.receiver_num_layers)
+            sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_1 = core.RnnSenderReinforce(sender_1,
+                                       opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                       cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                       force_eos=force_eos)
 
-        agent_1=AgentBaseline(receiver = receiver_1, sender = sender_1)
+            receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_1 = core.RnnReceiverDeterministic(receiver_1, opts.vocab_size, opts.receiver_embedding,
+                                                   opts.receiver_hidden, cell=opts.receiver_cell,
+                                                   num_layers=opts.receiver_num_layers)
 
-        "Agent 2"
+            agent_1=AgentBaseline(receiver = receiver_1, sender = sender_1)
 
-        sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
-        sender_2 = core.RnnSenderReinforce(sender_2,
-                                   opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
-                                   cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
-                                   force_eos=force_eos)
+            "Agent 2"
 
-        receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
-        receiver_2 = core.RnnReceiverDeterministic(receiver_2, opts.vocab_size, opts.receiver_embedding,
-                                               opts.receiver_hidden, cell=opts.receiver_cell,
-                                               num_layers=opts.receiver_num_layers)
+            sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_2 = core.RnnSenderReinforce(sender_2,
+                                       opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                       cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                       force_eos=force_eos)
 
-        agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
+            receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_2 = core.RnnReceiverDeterministic(receiver_2, opts.vocab_size, opts.receiver_embedding,
+                                                   opts.receiver_hidden, cell=opts.receiver_cell,
+                                                   num_layers=opts.receiver_num_layers)
 
-        game = DialogReinforce(Agent_1=agent_1,
-                               Agent_2=agent_2,
-                               loss=loss,
-                               sender_entropy_coeff=opts.sender_entropy_coeff,
-                               receiver_entropy_coeff=opts.receiver_entropy_coeff,
-                               loss_weights=[0.5,0.5],
-                               length_cost=0.0,
-                               unigram_penalty=0.0,
-                               reg=False)
+            agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
+
+            game = DialogReinforceBaseline(Agent_1=agent_1,
+                                           Agent_2=agent_2,
+                                           loss=loss,
+                                           sender_entropy_coeff=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           loss_weights=[0.5,0.5],
+                                           length_cost=0.0,
+                                           unigram_penalty=0.0,
+                                           reg=False)
+
+            optimizer_1 = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.receiver.parameters()))
+            optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters()))
 
 
-    #optimizer = core.build_optimizer(game.parameters())
-    optimizer_1 = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.receiver.parameters()))
-    optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters()))
+            trainer = TrainerDialog(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, train_data=train_loader,
+                                            validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+        elif opts.model=="model_1":
+
+            "Agent 1"
+
+            sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_1 = core.RnnSenderReinforce(sender_1,
+                                       opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                       cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                       force_eos=force_eos)
+
+            receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_1 = core.RnnReceiverDeterministic(receiver_1, opts.vocab_size, opts.receiver_embedding,
+                                                   opts.receiver_hidden, cell=opts.receiver_cell,
+                                                   num_layers=opts.receiver_num_layers)
+
+            agent_1=AgentBaseline(receiver = receiver_1, sender = sender_1)
+
+            "Agent 2"
+
+            sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_2 = core.RnnSenderReinforce(sender_2,
+                                       opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                       cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                       force_eos=force_eos)
+
+            receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_2 = core.RnnReceiverDeterministic(receiver_2, opts.vocab_size, opts.receiver_embedding,
+                                                   opts.receiver_hidden, cell=opts.receiver_cell,
+                                                   num_layers=opts.receiver_num_layers)
+
+            agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
+
+            game = DialogReinforceModel_1(Agent_1=agent_1,
+                                           Agent_2=agent_2,
+                                           loss=loss,
+                                           sender_entropy_coeff=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           loss_weights=[0.5,0.5],
+                                           length_cost=0.0,
+                                           unigram_penalty=0.0,
+                                           reg=False)
+
+            optimizer_1 = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.receiver.parameters()))
+            optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters()))
 
 
-    trainer = TrainerDialog(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, train_data=train_loader,
-                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+            trainer = TrainerDialog(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, train_data=train_loader,
+                                            validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
 
 
     for epoch in range(int(opts.n_epochs)):

@@ -299,7 +299,7 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
         output_symbol = receiver_output.argmax()
         acc = (input_symbol == output_symbol).float().item()
 
-        acc_vec_11[int(input_symbol)]=acc
+        acc_vec_11  [int(input_symbol)]=acc
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
@@ -344,7 +344,7 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
 
     acc_vec_22=np.zeros(n_features)
 
-    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_22):
+    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_22):
         input_symbol = sender_input.argmax()
         output_symbol = receiver_output.argmax()
         acc = (input_symbol == output_symbol).float().item()

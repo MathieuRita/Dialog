@@ -476,7 +476,7 @@ class DialogReinforceBaseline(nn.Module):
         """
 
         """
-        super(DialogReinforce, self).__init__()
+        super(DialogReinforceBaseline, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
         self.sender_entropy_coeff = sender_entropy_coeff

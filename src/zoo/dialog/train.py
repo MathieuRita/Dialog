@@ -16,7 +16,7 @@ from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient
 #Dialog
-from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforce
+from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforce,DialogReinforceBaseline
 from src.core.util import dump_sender_receiver_dialog
 from src.core.trainers import TrainerDialog
 

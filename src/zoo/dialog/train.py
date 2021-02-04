@@ -16,9 +16,9 @@ from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient
 #Dialog
-from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforce,DialogReinforceBaseline
+from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforce,DialogReinforceBaseline,DialogReinforceModel1
 from src.core.util import dump_sender_receiver_dialog
-from src.core.trainers import TrainerDialog
+from src.core.trainers import TrainerDialog, TrainerDialogModel1
 
 
 def get_params(params):
@@ -444,7 +444,7 @@ def main(params):
 
             agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
 
-            game = DialogReinforceModel_1(Agent_1=agent_1,
+            game = DialogReinforceModel1(Agent_1=agent_1,
                                            Agent_2=agent_2,
                                            loss=loss,
                                            sender_entropy_coeff=opts.sender_entropy_coeff,
@@ -454,12 +454,12 @@ def main(params):
                                            unigram_penalty=0.0,
                                            reg=False)
 
-            optimizer_1 = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.receiver.parameters()))
-            optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters()))
+            optimizer_1 = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.receiver.parameters())+list(game.agent_1.receiver.parameters()))
+            optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters())+list(game.agent_2.receiver.parameters()))
 
 
             trainer = TrainerDialog(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, train_data=train_loader,
-                                            validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+                                    validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
 
 

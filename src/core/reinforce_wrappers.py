@@ -612,7 +612,7 @@ class DialogReinforceBaseline(nn.Module):
         self.n_points[name] += 1
         self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
 
-class DialogReinforce(nn.Module):
+class DialogReinforceModel1(nn.Module):
 
     """
     DialogReinforce implements the Dialog game
@@ -624,7 +624,8 @@ class DialogReinforce(nn.Module):
                  loss,
                  sender_entropy_coeff,
                  receiver_entropy_coeff,
-                 loss_weights=[0.5,0.5],
+                 device,
+                 loss_weights=[[0.25,0.25],[0.25,0.25]],
                  length_cost=0.0,
                  unigram_penalty=0.0,
                  reg=False):
@@ -640,123 +641,241 @@ class DialogReinforce(nn.Module):
         self.loss_weights = loss_weights
         self.length_cost = length_cost
         self.unigram_penalty = unigram_penalty
-
+        self.device=device
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.reg=reg
 
     def forward(self, sender_input, labels, receiver_input=None):
 
-        "1. Agent_1 -> Agent_2"
+        sender_input=sender_input.to(self.device)
 
+        "1. Agent 1"
         message_1, log_prob_s_1, entropy_s_1 = self.agent_1.sender(sender_input)
-        message_lengths_1 = find_lengths(message_1)
 
-        receiver_output_1, log_prob_r_1, entropy_r_1 = self.agent_2.receiver(message_1, receiver_input, message_lengths_1)
+        "1.2 Agent_1 -> Agent_2"
 
-        loss_1, rest_1 = self.loss(sender_input, message_1, receiver_input, receiver_output_1, labels)
+        message_12, log_prob_s_12, entropy_s_12 = message_1, log_prob_s_1, entropy_s_1
+        message_lengths_12 = find_lengths(message_12)
+
+        receiver_output_12, log_prob_r_12, entropy_r_12 = self.agent_2.receiver(message_12, receiver_input, message_lengths_122)
+
+        loss_12, rest_12 = self.loss(sender_input, message_12, receiver_input, receiver_output_12, labels)
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
-        effective_entropy_s_1 = torch.zeros_like(entropy_r_1)
+        effective_entropy_s_12 = torch.zeros_like(entropy_r_12)
 
         # the log prob of the choices made by S before and including the eos symbol - again, we don't
         # care about the rest
-        effective_log_prob_s_1 = torch.zeros_like(log_prob_r_1)
+        effective_log_prob_s_12 = torch.zeros_like(log_prob_r_12)
 
-        for i in range(message_1.size(1)):
-            not_eosed_1 = (i < message_lengths_1).float()
-            effective_entropy_s_1 += entropy_s_1[:, i] * not_eosed_1
-            effective_log_prob_s_1 += log_prob_s_1[:, i] * not_eosed_1
-        effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
+        for i in range(message_12.size(1)):
+            not_eosed_12 = (i < message_lengths_12).float()
+            effective_entropy_s_12 += entropy_s_12[:, i] * not_eosed_12
+            effective_log_prob_s_12 += log_prob_s_12[:, i] * not_eosed_12
+        effective_entropy_s_12 = effective_entropy_s_12 / message_lengths_12.float()
 
-        weighted_entropy_1 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
-                entropy_r_1.mean() * self.receiver_entropy_coeff
+        weighted_entropy_12 = effective_entropy_s_12.mean() * self.sender_entropy_coeff + \
+                entropy_r_12.mean() * self.receiver_entropy_coeff
 
-        log_prob_1 = effective_log_prob_s_1 + log_prob_r_1
+        log_prob_12 = effective_log_prob_s_12 + log_prob_r_12
 
-        length_loss_1 = message_lengths_1.float() * self.length_cost
+        length_loss_12 = message_lengths_12.float() * self.length_cost
 
-        policy_length_loss_1 = ((length_loss_1.float() - self.mean_baseline['length_1']) * effective_log_prob_s_1).mean()
-        policy_loss_1 = ((loss_1.detach() - self.mean_baseline['loss_1']) * log_prob_1).mean()
+        policy_length_loss_12 = ((length_loss_12.float() - self.mean_baseline['length_1']) * effective_log_prob_s_12).mean()
+        policy_loss_12 = ((loss_12.detach() - self.mean_baseline['loss_1']) * log_prob_12).mean()
 
-        optimized_loss_1 = policy_length_loss_1 + policy_loss_1 - weighted_entropy_1
+        optimized_loss_12 = policy_length_loss_12 + policy_loss_12 - weighted_entropy_12
 
         # if the receiver is deterministic/differentiable, we apply the actual loss
-        optimized_loss_1 += loss_1.mean()
+        optimized_loss_12 += loss_12.mean()
 
         if self.training:
-            self.update_baseline('loss_1', loss_1)
-            self.update_baseline('length_1', length_loss_1)
+            self.update_baseline('loss_12', loss_12)
+            self.update_baseline('length_12', length_loss_12)
 
-        for k, v in rest_1.items():
-            rest_1[k] = v.mean().item() if hasattr(v, 'mean') else v
-        rest_1['loss'] = optimized_loss_1.detach().item()
-        rest_1['sender_entropy'] = entropy_s_1.mean().item()
-        rest_1['receiver_entropy'] = entropy_r_1.mean().item()
-        rest_1['original_loss'] = loss_1.mean().item()
-        rest_1['mean_length'] = message_lengths_1.float().mean().item()
+        for k, v in rest_12.items():
+            rest_12[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest_12['loss'] = optimized_loss_12.detach().item()
+        rest_12['sender_entropy'] = entropy_s_12.mean().item()
+        rest_12['receiver_entropy'] = entropy_r_12.mean().item()
+        rest_12['original_loss'] = loss_12.mean().item()
+        rest_12['mean_length'] = message_lengths_12.float().mean().item()
 
+        "1.1 Agent_1 -> Agent_1"
+
+        message_11, log_prob_s_11, entropy_s_11 = message_1, log_prob_s_1, entropy_s_1
+        message_lengths_11 = find_lengths(message_11)
+
+        receiver_output_11, log_prob_r_11, entropy_r_11 = self.agent_1.receiver(message_11, receiver_input, message_lengths_11)
+
+        loss_11, rest_11 = self.loss(sender_input, message_11, receiver_input, receiver_output_11, labels)
+
+        # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
+        effective_entropy_s_11 = torch.zeros_like(entropy_r_11)
+
+        # the log prob of the choices made by S before and including the eos symbol - again, we don't
+        # care about the rest
+        effective_log_prob_s_11 = torch.zeros_like(log_prob_r_11)
+
+        for i in range(message_11.size(1)):
+            not_eosed_11 = (i < message_lengths_11).float()
+            effective_entropy_s_11 += entropy_s_11[:, i] * not_eosed_11
+            effective_log_prob_s_11 += log_prob_s_11[:, i] * not_eosed_11
+        effective_entropy_s_11 = effective_entropy_s_11 / message_lengths_11.float()
+
+        weighted_entropy_11 = effective_entropy_s_11.mean() * self.sender_entropy_coeff + \
+                entropy_r_11.mean() * self.receiver_entropy_coeff
+
+        log_prob_11 = effective_log_prob_s_11 + log_prob_r_11
+
+        length_loss_11 = message_lengths_11.float() * self.length_cost
+
+        policy_length_loss_11 = ((length_loss_11.float() - self.mean_baseline['length_1']) * effective_log_prob_s_11).mean()
+        policy_loss_11 = ((loss_11.detach() - self.mean_baseline['loss_1']) * log_prob_11).mean()
+
+        optimized_loss_11 = policy_length_loss_11 + policy_loss_11 - weighted_entropy_11
+
+        # if the receiver is deterministic/differentiable, we apply the actual loss
+        optimized_loss_11 += loss_11.mean()
+
+        if self.training:
+            self.update_baseline('loss_11', loss_11)
+            self.update_baseline('length_11', length_loss_11)
+
+        for k, v in rest_11.items():
+            rest_11[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest_11['loss'] = optimized_loss_11.detach().item()
+        rest_11['sender_entropy'] = entropy_s_11.mean().item()
+        rest_11['receiver_entropy'] = entropy_r_11.mean().item()
+        rest_11['original_loss'] = loss_11.mean().item()
+        rest_11['mean_length'] = message_lengths_11.float().mean().item()
+
+
+        "2. Agent 2"
+        message_2, log_prob_s_2, entropy_s_2 = self.agent_2.sender(sender_input)
 
         "2. Agent_2 -> Agent_1"
 
-        message_2, log_prob_s_2, entropy_s_2 = self.agent_2.sender(sender_input)
-        message_lengths_2 = find_lengths(message_2)
+        message_21, log_prob_s_21, entropy_s_21 = message_2, log_prob_s_2, entropy_s_2
 
-        receiver_output_2, log_prob_r_2, entropy_r_2 = self.agent_1.receiver(message_2, receiver_input, message_lengths_2)
+        message_lengths_21 = find_lengths(message_21)
 
-        loss_2, rest_2 = self.loss(sender_input, message_2, receiver_input, receiver_output_2, labels)
+        receiver_output_21, log_prob_r_21, entropy_r_21 = self.agent_1.receiver(message_21, receiver_input, message_lengths_21)
+
+        loss_21, rest_21 = self.loss(sender_input, message_21, receiver_input, receiver_output_21, labels)
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
-        effective_entropy_s_2 = torch.zeros_like(entropy_r_2)
+        effective_entropy_s_21 = torch.zeros_like(entropy_r_21)
 
         # the log prob of the choices made by S before and including the eos symbol - again, we don't
         # care about the rest
-        effective_log_prob_s_2 = torch.zeros_like(log_prob_r_2)
+        effective_log_prob_s_21 = torch.zeros_like(log_prob_r_21)
 
-        for i in range(message_2.size(1)):
-            not_eosed_2 = (i < message_lengths_2).float()
-            effective_entropy_s_2 += entropy_s_2[:, i] * not_eosed_2
-            effective_log_prob_s_2 += log_prob_s_2[:, i] * not_eosed_2
-        effective_entropy_s_2 = effective_entropy_s_2 / message_lengths_2.float()
+        for i in range(message_21.size(1)):
+            not_eosed_21 = (i < message_lengths_21).float()
+            effective_entropy_s_21 += entropy_s_21[:, i] * not_eosed_21
+            effective_log_prob_s_21 += log_prob_s_21[:, i] * not_eosed_21
+        effective_entropy_s_21 = effective_entropy_s_21 / message_lengths_21.float()
 
-        weighted_entropy_2 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
-                entropy_r_2.mean() * self.receiver_entropy_coeff
+        weighted_entropy_21 = effective_entropy_s_21.mean() * self.sender_entropy_coeff + \
+                entropy_r_21.mean() * self.receiver_entropy_coeff
 
-        log_prob_2 = effective_log_prob_s_2 + log_prob_r_2
+        log_prob_21 = effective_log_prob_s_21 + log_prob_r_21
 
-        length_loss_2 = message_lengths_2.float() * self.length_cost
+        length_loss_21 = message_lengths_21.float() * self.length_cost
 
-        policy_length_loss_2 = ((length_loss_2.float() - self.mean_baseline['length_2']) * effective_log_prob_s_2).mean()
-        policy_loss_2 = ((loss_2.detach() - self.mean_baseline['loss_2']) * log_prob_2).mean()
+        policy_length_loss_21 = ((length_loss_21.float() - self.mean_baseline['length_21']) * effective_log_prob_s_21).mean()
+        policy_loss_21 = ((loss_21.detach() - self.mean_baseline['loss_21']) * log_prob_21).mean()
 
-        optimized_loss_2 = policy_length_loss_2 + policy_loss_2 - weighted_entropy_2
+        optimized_loss_21 = policy_length_loss_21 + policy_loss_21 - weighted_entropy_21
 
         # if the receiver is deterministic/differentiable, we apply the actual loss
-        optimized_loss_2 += loss_2.mean()
+        optimized_loss_21 += loss_21.mean()
 
         if self.training:
-            self.update_baseline('loss_2', loss_2)
-            self.update_baseline('length_2', length_loss_2)
+            self.update_baseline('loss_21', loss_21)
+            self.update_baseline('length_21', length_loss_21)
 
-        for k, v in rest_2.items():
-            rest_2[k] = v.mean().item() if hasattr(v, 'mean') else v
-        rest_2['loss'] = optimized_loss_2.detach().item()
-        rest_2['sender_entropy'] = entropy_s_2.mean().item()
-        rest_2['receiver_entropy'] = entropy_r_2.mean().item()
-        rest_2['original_loss'] = loss_2.mean().item()
-        rest_2['mean_length'] = message_lengths_2.float().mean().item()
+        for k, v in rest_21.items():
+            rest_21[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest_21['loss'] = optimized_loss_21.detach().item()
+        rest_21['sender_entropy'] = entropy_s_21.mean().item()
+        rest_21['receiver_entropy'] = entropy_r_21.mean().item()
+        rest_21['original_loss'] = loss_21.mean().item()
+        rest_21['mean_length'] = message_lengths_21.float().mean().item()
+
+        "2. Agent_2 -> Agent_2"
+
+        message_22, log_prob_s_22, entropy_s_22 = message_2, log_prob_s_2, entropy_s_2
+
+        message_lengths_22 = find_lengths(message_22)
+
+        receiver_output_22, log_prob_r_22, entropy_r_22 = self.agent_1.receiver(message_22, receiver_input, message_lengths_22)
+
+        loss_22, rest_22 = self.loss(sender_input, message_22, receiver_input, receiver_output_22, labels)
+
+        # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
+        effective_entropy_s_22 = torch.zeros_like(entropy_r_22)
+
+        # the log prob of the choices made by S before and including the eos symbol - again, we don't
+        # care about the rest
+        effective_log_prob_s_22 = torch.zeros_like(log_prob_r_22)
+
+        for i in range(message_22.size(1)):
+            not_eosed_22 = (i < message_lengths_22).float()
+            effective_entropy_s_22 += entropy_s_22[:, i] * not_eosed_22
+            effective_log_prob_s_22 += log_prob_s_22[:, i] * not_eosed_22
+        effective_entropy_s_22 = effective_entropy_s_22 / message_lengths_22.float()
+
+        weighted_entropy_22 = effective_entropy_s_22.mean() * self.sender_entropy_coeff + \
+                entropy_r_22.mean() * self.receiver_entropy_coeff
+
+        log_prob_22 = effective_log_prob_s_22 + log_prob_r_22
+
+        length_loss_22 = message_lengths_22.float() * self.length_cost
+
+        policy_length_loss_22 = ((length_loss_22.float() - self.mean_baseline['length_22']) * effective_log_prob_s_22).mean()
+        policy_loss_22 = ((loss_22.detach() - self.mean_baseline['loss_22']) * log_prob_22).mean()
+
+        optimized_loss_22 = policy_length_loss_22 + policy_loss_22 - weighted_entropy_22
+
+        # if the receiver is deterministic/differentiable, we apply the actual loss
+        optimized_loss_22 += loss_22.mean()
+
+        if self.training:
+            self.update_baseline('loss_22', loss_22)
+            self.update_baseline('length_22', length_loss_22)
+
+        for k, v in rest_22.items():
+            rest_22[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest_22['loss'] = optimized_loss_22.detach().item()
+        rest_22['sender_entropy'] = entropy_s_22.mean().item()
+        rest_22['receiver_entropy'] = entropy_r_22.mean().item()
+        rest_22['original_loss'] = loss_22.mean().item()
+        rest_22['mean_length'] = message_lengths_22.float().mean().item()
 
         "3. Average loss"
 
-        optimized_loss = self.loss_weights[0]*optimized_loss_1 + self.loss_weights[1]*optimized_loss_2
+        optimized_loss_1 = self.loss_weights[0][0]*optimized_loss_11 + self.loss_weights[0][1]*optimized_loss_12
+        optimized_loss_2 = self.loss_weights[1][0]*optimized_loss_21 + self.loss_weights[1][1]*optimized_loss_22
+
+        optimized_loss = self.loss_weights[0][0]*optimized_loss_11 + self.loss_weights[0][1]*optimized_loss_12 \
+                         self.loss_weights[1][0]*optimized_loss_21 + self.loss_weights[1][1]*optimized_loss_22
 
         rest={}
-        rest['loss']=self.loss_weights[0]*rest_1['loss'] + self.loss_weights[1]* rest_2['loss']
-        rest['sender_entropy']=self.loss_weights[0]*rest_1['sender_entropy'] + self.loss_weights[1]* rest_2['sender_entropy']
-        rest['receiver_entropy']=self.loss_weights[0]*rest_1['receiver_entropy'] + self.loss_weights[1]* rest_2['receiver_entropy']
-        rest['original_loss']=self.loss_weights[0]*rest_1['original_loss'] + self.loss_weights[1]* rest_2['original_loss']
-        rest['mean_length']=self.loss_weights[0]*rest_1['mean_length'] + self.loss_weights[1]* rest_2['mean_length']
-        rest['acc']=self.loss_weights[0]*rest_1['acc'] + self.loss_weights[1]* rest_2['acc']
+        rest['loss']=self.loss_weights[0][0]*rest_11['loss'] + self.loss_weights[0][1]*rest_12['loss'] \
+                         self.loss_weights[1][0]*rest_21['loss'] + self.loss_weights[1][1]*rest_22['loss']
+        rest['sender_entropy']=self.loss_weights[0][0]*rest_11['sender_entropy'] + self.loss_weights[0][1]*rest_12['sender_entropy'] \
+                                self.loss_weights[1][0]*rest_21['sender_entropy'] + self.loss_weights[1][1]*rest_22['sender_entropy']
+        rest['receiver_entropy']=self.loss_weights[0][0]*rest_11['receiver_entropy'] + self.loss_weights[0][1]*rest_12['receiver_entropy'] \
+                                 self.loss_weights[1][0]*rest_21['receiver_entropy'] + self.loss_weights[1][1]*rest_22['receiver_entropy']
+        rest['original_loss']=self.loss_weights[0][0]*rest_11['original_loss'] + self.loss_weights[0][1]*rest_12['original_loss'] \
+                                self.loss_weights[1][0]*rest_21['original_loss'] + self.loss_weights[1][1]*rest_22['original_loss']
+        rest['mean_length']=self.loss_weights[0][0]*rest_11['mean_length'] + self.loss_weights[0][1]*rest_12['mean_length'] \
+                            self.loss_weights[1][0]*rest_21['mean_length'] + self.loss_weights[1][1]*rest_22['mean_length']
+        rest['acc']=self.loss_weights[0][0]*rest_11['acc'] + self.loss_weights[0][1]*rest_12['acc'] \
+                         self.loss_weights[1][0]*rest_21['acc'] + self.loss_weights[1][1]*rest_22['acc']
 
         return optimized_loss_1, optimized_loss_2, rest
 

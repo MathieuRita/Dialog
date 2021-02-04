@@ -17,7 +17,7 @@ from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient
 #Dialog
 from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforceBaseline,DialogReinforceModel1
-from src.core.util import dump_sender_receiver_dialog
+from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1
 from src.core.trainers import TrainerDialog, TrainerDialogModel1
 
 
@@ -246,6 +246,117 @@ def dump_dialog(game, n_features, device, gs_mode, epoch):
 
     unif_acc /= n_features
 
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    return acc_vec_1, messages_1, acc_vec_2, messages_2
+
+def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
+    # tiny "dataset"
+    dataset = [[torch.eye(n_features).to(device), None]]
+
+    sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_11,receiver_outputs_12, \
+    sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_21,receiver_outputs_22, _ = \
+        dump_sender_receiver_dialog_model_1(game, dataset, gs=gs_mode, device=device, variable_length=True)
+
+
+    print("Language 1 (Agent 1 -> Agent 2)")
+
+    "1->2"
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_1=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_12):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_1[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%50==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    "1->1"
+    print("internal listener")
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_1=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_11):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_1[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%50==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    print("Language 2 (Agent 2 -> Agent 1)")
+
+    "2->1"
+
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_2=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_21):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_2[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%50==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    print("internal listener")
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_1=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_22):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_1[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%50==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
 
     return acc_vec_1, messages_1, acc_vec_2, messages_2
@@ -480,7 +591,10 @@ def main(params):
                 acc_vec,messages=dump_impatient(trainer.game, opts.n_features, device, False,epoch)
 
         else:
-            acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
+            if opts.model=="baseline":
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
+            elif opts.model=="model_1":
+                dump_dialog_model_1(game, n_features, device, gs_mode, epoch)
 
         # Convert to numpy to save messages
         all_messages_1=[]

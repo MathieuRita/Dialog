@@ -7,6 +7,7 @@ import os
 import uuid
 import pathlib
 from typing import List, Optional
+import numpy as np
 
 import torch
 from torch.utils.data import DataLoader
@@ -628,8 +629,8 @@ class TrainerDialogModel1:
         with torch.no_grad():
             for batch in self.validation_data:
                 batch = move_to(batch, self.device)
-                optimized_loss_1,optimized_loss_2, rest = self.game(*batch)
-                mean_loss += 0.5*(optimized_loss_1 + optimized_loss_2)
+                optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest = self.game(*batch)
+                mean_loss += 0.25*(optimized_loss_11 + optimized_loss_12 + optimized_loss_21 + optimized_loss_22)
                 mean_rest = _add_dicts(mean_rest, rest)
                 n_batches += 1
         mean_loss /= n_batches
@@ -647,23 +648,25 @@ class TrainerDialogModel1:
             batch = move_to(batch, self.device)
             mean_rest = _add_dicts(mean_rest, rest)
 
-            self.optimizer_sender_1.zero_grad()
-            self.optimizer_receiver_1.zero_grad()
-            self.optimizer_receiver_2.zero_grad()
-            optimized_loss_11.backward()
-            optimized_loss_12.backward()
-            self.optimizer_sender_1.step()
-            self.optimizer_receiver_1.step()
-            self.optimizer_receiver_2.step()
+            optimized_loss_sender_1=optimized_loss_11+optimized_loss_12
+            optimized_loss_sender_2=optimized_loss_21+optimized_loss_22
 
-            self.optimizer_sender_2.zero_grad()
-            self.optimizer_receiver_1.zero_grad()
-            self.optimizer_receiver_2.zero_grad()
-            optimized_loss_21.backward()
-            optimized_loss_22.backward()
-            self.optimizer_sender_2.step()
-            self.optimizer_receiver_1.step()
-            self.optimizer_receiver_2.step()
+            if np.random.rand()>0.5:
+              self.optimizer_sender_1.zero_grad()
+              self.optimizer_receiver_1.zero_grad()
+              self.optimizer_receiver_2.zero_grad()
+              optimized_loss_sender_1.backward()
+              self.optimizer_sender_1.step()
+              self.optimizer_receiver_1.step()
+              self.optimizer_receiver_2.step()
+            else:
+              self.optimizer_sender_2.zero_grad()
+              self.optimizer_receiver_1.zero_grad()
+              self.optimizer_receiver_2.zero_grad()
+              optimized_loss_sender_2.backward()
+              self.optimizer_sender_2.step()
+              self.optimizer_receiver_1.step()
+              self.optimizer_receiver_2.step()
 
 
             n_batches += 1

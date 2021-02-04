@@ -16,7 +16,7 @@ from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient
 #Dialog
-from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforce,DialogReinforceBaseline,DialogReinforceModel1
+from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforceBaseline,DialogReinforceModel1
 from src.core.util import dump_sender_receiver_dialog
 from src.core.trainers import TrainerDialog, TrainerDialogModel1
 
@@ -451,7 +451,8 @@ def main(params):
                                            receiver_entropy_coeff=opts.receiver_entropy_coeff,
                                            length_cost=0.0,
                                            unigram_penalty=0.0,
-                                           reg=False)
+                                           reg=False,
+                                           device=device)
 
             optimizer_1 = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.receiver.parameters())+list(game.agent_1.receiver.parameters()))
             optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters())+list(game.agent_2.receiver.parameters()))

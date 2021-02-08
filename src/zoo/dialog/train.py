@@ -176,20 +176,20 @@ def loss_model_2(sender_input, _message, message_length, _receiver_input, receiv
     """
 
     # 1. len_mask selects only the symbols before EOS-token
-    to_onehot=torch.eye(_message.size(1)).to("cuda")
-    to_onehot=torch.cat((to_onehot,torch.zeros((1,_message.size(1))).to("cuda")),0)
-    len_mask=[]
-    for i in range(message_length.size(0)):
-      len_mask.append(to_onehot[message_length[i]])
-    len_mask=torch.stack(len_mask,dim=0)
+    #to_onehot=torch.eye(_message.size(1)).to("cuda")
+    #to_onehot=torch.cat((to_onehot,torch.zeros((1,_message.size(1))).to("cuda")),0)
+    #len_mask=[]
+    #for i in range(message_length.size(0)):
+    #  len_mask.append(to_onehot[message_length[i]])
+    #len_mask=torch.stack(len_mask,dim=0)
 
-    len_mask=torch.cumsum(len_mask,dim=1)
-    len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
+    #len_mask=torch.cumsum(len_mask,dim=1)
+    #len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
 
     # 2. coef applies weights on each position. By default it is equal
-    coef=(1/message_length.to(float)).repeat(_message.size(1),1).transpose(1,0) # useless ?
-    len_mask.mul_((coef))
-    len_mask.mul_((1/len_mask.sum(1)).repeat((_message.size(1),1)).transpose(1,0))
+    #coef=(1/message_length.to(float)).repeat(_message.size(1),1).transpose(1,0) # useless ?
+    #len_mask.mul_((coef))
+    #len_mask.mul_((1/len_mask.sum(1)).repeat((_message.size(1),1)).transpose(1,0))
 
     # Test: change positional wieghts
     #coef2=coef*torch.arange(_message.size(1),0,-1).repeat(_message.size(0),1).to("cuda")
@@ -731,7 +731,7 @@ def main(params):
 
             game = DialogReinforceModel2(Agent_1=agent_1,
                                            Agent_2=agent_2,
-                                           loss=loss,
+                                           loss=loss_model_2,
                                            sender_entropy_coeff=opts.sender_entropy_coeff,
                                            receiver_entropy_coeff=opts.receiver_entropy_coeff,
                                            length_cost=0.0,

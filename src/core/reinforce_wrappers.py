@@ -1510,3 +1510,327 @@ class CompositionalitySenderReceiverRnnReinforce(nn.Module):
     def update_baseline(self, name, value):
         self.n_points[name] += 1
         self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
+
+
+
+class CompositionalitySenderImpatientReceiverRnnReinforce(nn.Module):
+    """
+    Implements Sender/Receiver game with training done via Reinforce. Both agents are supposed to
+    return 3-tuples of (output, log-prob of the output, entropy).
+    The game implementation is responsible for handling the end-of-sequence term, so that the optimized loss
+    corresponds either to the position of the eos term (assumed to be 0) or the end of sequence.
+
+    Sender and Receiver can be obtained by applying the corresponding wrappers.
+    `SenderReceiverRnnReinforce` also applies the mean baseline to the loss function to reduce the variance of the
+    gradient estimate.
+
+    >>> sender = nn.Linear(3, 10)
+    >>> sender = RnnSenderReinforce(sender, vocab_size=15, embed_dim=5, hidden_size=10, max_len=10, cell='lstm')
+
+    >>> class Receiver(nn.Module):
+    ...     def __init__(self):
+    ...         super().__init__()
+    ...         self.fc = nn.Linear(5, 3)
+    ...     def forward(self, rnn_output, _input = None):
+    ...         return self.fc(rnn_output)
+    >>> receiver = RnnReceiverDeterministic(Receiver(), vocab_size=15, embed_dim=10, hidden_size=5)
+    >>> def loss(sender_input, _message, _receiver_input, receiver_output, _labels):
+    ...     return F.mse_loss(sender_input, receiver_output, reduction='none').mean(dim=1), {'aux': 5.0}
+
+    >>> game = SenderReceiverRnnReinforce(sender, receiver, loss, sender_entropy_coeff=0.0, receiver_entropy_coeff=0.0,
+    ...                                   length_cost=1e-2)
+    >>> input = torch.zeros((16, 3)).normal_()
+    >>> optimized_loss, aux_info = game(input, labels=None)
+    >>> sorted(list(aux_info.keys()))  # returns some debug info, such as entropies of the agents, message length etc
+    ['aux', 'loss', 'mean_length', 'original_loss', 'receiver_entropy', 'sender_entropy']
+    >>> aux_info['aux']
+    5.0
+    """
+    def __init__(self, sender, receiver, loss, sender_entropy_coeff, receiver_entropy_coeff,n_attributes,n_values,att_weights,
+                 length_cost=0.0,unigram_penalty=0.0,reg=False):
+        """
+        :param sender: sender agent
+        :param receiver: receiver agent
+        :param loss:  the optimized loss that accepts
+            sender_input: input of Sender
+            message: the is sent by Sender
+            receiver_input: input of Receiver from the dataset
+            receiver_output: output of Receiver
+            labels: labels assigned to Sender's input data
+          and outputs a tuple of (1) a loss tensor of shape (batch size, 1) (2) the dict with auxiliary information
+          of the same shape. The loss will be minimized during training, and the auxiliary information aggregated over
+          all batches in the dataset.
+
+        :param sender_entropy_coeff: entropy regularization coeff for sender
+        :param receiver_entropy_coeff: entropy regularization coeff for receiver
+        :param length_cost: the penalty applied to Sender for each symbol produced
+        """
+        super(CompositionalitySenderImpatientReceiverRnnReinforce, self).__init__()
+        self.sender = sender
+        self.receiver = receiver
+        self.sender_entropy_coeff = sender_entropy_coeff
+        self.receiver_entropy_coeff = receiver_entropy_coeff
+        self.loss = loss
+        self.length_cost = length_cost
+        self.unigram_penalty = unigram_penalty
+        self.reg=reg
+        self.n_attributes=n_attributes
+        self.n_values=n_values
+        self.att_weights=att_weights
+
+        self.mean_baseline = defaultdict(float)
+        self.n_points = defaultdict(float)
+
+    def forward(self, sender_input, labels, receiver_input=None):
+
+        #print(sender_input[:,11:-1])
+        message, log_prob_s, entropy_s = self.sender(torch.floor(sender_input))
+        message_lengths = find_lengths(message)
+
+        # If impatient 1
+        receiver_output_all_att, log_prob_r_all_att, entropy_r_all_att = self.receiver(message, receiver_input, message_lengths)
+
+        # reg
+        sc=0.
+
+        # Version de base
+        #loss, rest, crible_acc = self.loss(sender_input, message, message_lengths, receiver_input, receiver_output_all_att, labels,self.n_attributes,self.n_values,self.att_weights)
+
+        # Take into account the fact that an attribute is not sampled
+        loss, rest, crible_acc = self.loss(sender_input, message, message_lengths, receiver_input, receiver_output_all_att, labels,self.n_attributes,self.n_values,self.att_weights)
+
+
+        if self.reg:
+            for i in range(message_lengths.size(0)):
+              sc+=crible_acc[i,message_lengths[i]-1]
+
+
+        log_prob_r=log_prob_r_all_att.mean(1).mean(1)
+        entropy_r=entropy_r_all_att.mean(1).mean(1)
+
+        # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
+        effective_entropy_s = torch.zeros_like(entropy_r)
+
+        # the log prob of the choices made by S before and including the eos symbol - again, we don't
+        # care about the rest
+        effective_log_prob_s = torch.zeros_like(log_prob_r)
+
+        for i in range(message.size(1)):
+            not_eosed = (i < message_lengths).float()
+            effective_entropy_s += entropy_s[:, i] * not_eosed
+            effective_log_prob_s += log_prob_s[:, i] * not_eosed
+        effective_entropy_s = effective_entropy_s / message_lengths.float()
+
+        weighted_entropy = effective_entropy_s.mean() * self.sender_entropy_coeff + \
+                entropy_r.mean() * self.receiver_entropy_coeff
+
+        log_prob = effective_log_prob_s + log_prob_r
+
+        if self.reg:
+            sc/=message_lengths.size(0)
+
+            if sc>0.9 and sc<0.99:
+                self.length_cost=0.
+            if sc>0.99:
+                self.length_cost+=0.01
+            #if sc<0.9:
+            #   self.length_cost=-0.1
+            #self.length_cost= sc**(60) / 2
+
+        length_loss = message_lengths.float() * self.length_cost
+
+        # Penalty redundancy
+        #counts_unigram=((message[:,1:]-message[:,:-1])==0).sum(axis=1).sum(axis=0)
+        #unigram_loss = self.unigram_penalty*counts_unigram
+
+        policy_length_loss = ((length_loss.float() - self.mean_baseline['length']) * effective_log_prob_s).mean()
+        policy_loss = ((loss.detach() - self.mean_baseline['loss']) * log_prob).mean()
+
+        optimized_loss = policy_length_loss + policy_loss - weighted_entropy
+
+        # if the receiver is deterministic/differentiable, we apply the actual loss
+        optimized_loss += loss.mean()
+
+        if self.training:
+            self.update_baseline('loss', loss)
+            self.update_baseline('length', length_loss)
+
+        for k, v in rest.items():
+            rest[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest['loss'] = optimized_loss.detach().item()
+        rest['sender_entropy'] = entropy_s.mean().item()
+        rest['receiver_entropy'] = entropy_r.mean().item()
+        rest['original_loss'] = loss.mean().item()
+        rest['mean_length'] = message_lengths.float().mean().item()
+
+        return optimized_loss, rest
+
+    def update_baseline(self, name, value):
+        self.n_points[name] += 1
+        self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
+
+
+class TransformerReceiverDeterministic(nn.Module):
+    def __init__(self, agent, vocab_size, max_len, embed_dim, num_heads, hidden_size, num_layers, positional_emb=True,
+                causal=True):
+        super(TransformerReceiverDeterministic, self).__init__()
+        self.agent = agent
+        self.encoder = TransformerEncoder(vocab_size=vocab_size,
+                                          max_len=max_len,
+                                          embed_dim=embed_dim,
+                                          num_heads=num_heads,
+                                          num_layers=num_layers,
+                                          hidden_size=hidden_size,
+                                          positional_embedding=positional_emb,
+                                          causal=causal)
+
+    def forward(self, message, input=None, lengths=None):
+        if lengths is None:
+            lengths = find_lengths(message)
+
+        transformed = self.encoder(message, lengths)
+        agent_output = self.agent(transformed, input)
+
+        logits = torch.zeros(agent_output.size(0)).to(agent_output.device)
+        entropy = logits
+
+        return agent_output, logits, entropy
+
+
+class TransformerSenderReinforce(nn.Module):
+    def __init__(self, agent, vocab_size, embed_dim, max_len, num_layers, num_heads, hidden_size,
+                 generate_style='standard', causal=True, force_eos=True):
+        """
+        :param agent: the agent to be wrapped, returns the "encoder" state vector, which is the unrolled into a message
+        :param vocab_size: vocab size of the message
+        :param embed_dim: embedding dimensions
+        :param max_len: maximal length of the message (including <eos>)
+        :param num_layers: number of transformer layers
+        :param num_heads: number of attention heads
+        :param hidden_size: size of the FFN layers
+        :param causal: whether embedding of a particular symbol should only depend on the symbols to the left
+        :param generate_style: Two alternatives: 'standard' and 'in-place'. Suppose we are generating 4th symbol,
+            after three symbols [s1 s2 s3] were generated.
+            Then,
+            'standard': [s1 s2 s3] -> embeddings [[e1] [e2] [e3]] -> (s4 = argmax(linear(e3)))
+            'in-place': [s1 s2 s3] -> [s1 s2 s3 <need-symbol>] -> embeddings [[e1] [e2] [e3] [e4]] -> (s4 = argmax(linear(e4)))
+        :param force_eos: <eos> added to the end of each sequence
+        """
+        super(TransformerSenderReinforce, self).__init__()
+        self.agent = agent
+
+        self.force_eos = force_eos
+        assert generate_style in ['standard', 'in-place']
+        self.generate_style = generate_style
+        self.causal = causal
+
+        self.max_len = max_len
+
+        if force_eos:
+            self.max_len -= 1
+
+        self.transformer = TransformerDecoder(embed_dim=embed_dim,
+                                              max_len=max_len, num_layers=num_layers,
+                                              num_heads=num_heads, hidden_size=hidden_size)
+
+        self.embedding_to_vocab = nn.Linear(embed_dim, vocab_size)
+
+        self.special_symbol_embedding = nn.Parameter(torch.zeros(embed_dim))
+        self.embed_dim = embed_dim
+        self.vocab_size = vocab_size
+
+        self.embed_tokens = torch.nn.Embedding(vocab_size, embed_dim)
+        nn.init.normal_(self.embed_tokens.weight, mean=0, std=self.embed_dim ** -0.5)
+        self.embed_scale = math.sqrt(embed_dim)
+
+    def generate_standard(self, encoder_state):
+        batch_size = encoder_state.size(0)
+        device = encoder_state.device
+
+        sequence = []
+        logits = []
+        entropy = []
+
+        special_symbol = self.special_symbol_embedding.expand(batch_size, -1).unsqueeze(1).to(device)
+        input = special_symbol
+
+        for step in range(self.max_len):
+            if self.causal:
+                attn_mask = torch.triu(torch.ones(step+1, step+1).byte(), diagonal=1).to(device)
+                attn_mask = attn_mask.float().masked_fill(attn_mask == 1, float('-inf'))
+            else:
+                attn_mask = None
+            output = self.transformer(embedded_input=input, encoder_out=encoder_state, attn_mask=attn_mask)
+            step_logits = F.log_softmax(self.embedding_to_vocab(output[:, -1, :]), dim=1)
+
+            distr = Categorical(logits=step_logits)
+            entropy.append(distr.entropy())
+            if self.training:
+                symbols = distr.sample()
+            else:
+                symbols = step_logits.argmax(dim=1)
+            logits.append(distr.log_prob(symbols))
+            sequence.append(symbols)
+
+            new_embedding = self.embed_tokens(symbols) * self.embed_scale
+            input = torch.cat([input, new_embedding.unsqueeze(dim=1)], dim=1)
+
+        return sequence, logits, entropy
+
+    def generate_inplace(self, encoder_state):
+        batch_size = encoder_state.size(0)
+        device = encoder_state.device
+
+        sequence = []
+        logits = []
+        entropy = []
+
+        special_symbol = self.special_symbol_embedding.expand(batch_size, -1).unsqueeze(1).to(encoder_state.device)
+        output = []
+        for step in range(self.max_len):
+            input = torch.cat(output + [special_symbol], dim=1)
+            if self.causal:
+                attn_mask = torch.triu(torch.ones(step+1, step+1).byte(), diagonal=1).to(device)
+                attn_mask = attn_mask.float().masked_fill(attn_mask == 1, float('-inf'))
+            else:
+                attn_mask = None
+
+            embedded = self.transformer(embedded_input=input, encoder_out=encoder_state, attn_mask=attn_mask)
+            step_logits = F.log_softmax(self.embedding_to_vocab(embedded[:, -1, :]), dim=1)
+
+            distr = Categorical(logits=step_logits)
+            entropy.append(distr.entropy())
+            if self.training:
+                symbols = distr.sample()
+            else:
+                symbols = step_logits.argmax(dim=1)
+            logits.append(distr.log_prob(symbols))
+            sequence.append(symbols)
+
+            new_embedding = self.embed_tokens(symbols) * self.embed_scale
+            output.append(new_embedding.unsqueeze(dim=1))
+
+        return sequence, logits, entropy
+
+    def forward(self, x):
+        encoder_state = self.agent(x)
+
+        if self.generate_style == 'standard':
+            sequence, logits, entropy = self.generate_standard(encoder_state)
+        elif self.generate_style == 'in-place':
+            sequence, logits, entropy = self.generate_inplace(encoder_state)
+        else:
+            assert False, 'Unknown generate style'
+
+        sequence = torch.stack(sequence).permute(1, 0)
+        logits = torch.stack(logits).permute(1, 0)
+        entropy = torch.stack(entropy).permute(1, 0)
+
+        if self.force_eos:
+            zeros = torch.zeros((sequence.size(0), 1)).to(sequence.device)
+
+            sequence = torch.cat([sequence, zeros.long()], dim=1)
+            logits = torch.cat([logits, zeros], dim=1)
+            entropy = torch.cat([entropy, zeros], dim=1)
+
+        return sequence, logits, entropy

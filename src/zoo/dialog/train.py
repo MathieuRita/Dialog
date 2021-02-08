@@ -14,6 +14,7 @@ from src.zoo.dialog.features import OneHotLoader, UniformLoader
 from src.zoo.dialog.archs import Sender, Receiver
 from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
+from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates
 from src.core.util import dump_sender_receiver_impatient
 #Dialog
 from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforceBaseline,DialogReinforceModel1
@@ -554,6 +555,59 @@ def main(params):
                                                    num_layers=opts.receiver_num_layers)
 
             agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
+
+            game = DialogReinforceModel1(Agent_1=agent_1,
+                                           Agent_2=agent_2,
+                                           loss=loss,
+                                           sender_entropy_coeff=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           length_cost=0.0,
+                                           unigram_penalty=0.0,
+                                           reg=False,
+                                           device=device)
+
+            optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
+            optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
+            optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
+            optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+
+            trainer = TrainerDialogModel1(game=game, optimizer_sender_1=optimizer_sender_1, optimizer_sender_2=optimizer_sender_2, \
+                                          optimizer_receiver_1=optimizer_receiver_1, optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
+                                          validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+        elif opts.model=="model_2":
+
+            "Agent 1"
+
+            sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_1 = core.RnnSenderReinforce(sender_1,
+                                               opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                               cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                               force_eos=force_eos)
+
+            receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_1 = core.RnnReceiverWithHiddenStates(receiver_1, opts.vocab_size, opts.receiver_embedding,
+                                                                   opts.receiver_hidden, cell=opts.receiver_cell,
+                                                                   num_layers=opts.receiver_num_layers)
+
+            agent_1=AgentBaseline(receiver = receiver_1, sender = sender_1)
+
+            "Agent 2"
+
+            sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_2 = core.RnnSenderReinforce(sender_2,
+                                               opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                               cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                               force_eos=force_eos)
+
+            receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_2 = core.RnnReceiverWithHiddenStates(receiver_2, opts.vocab_size, opts.receiver_embedding,
+                                                           opts.receiver_hidden, cell=opts.receiver_cell,
+                                                           num_layers=opts.receiver_num_layers)
+
+            agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
+
+            "Game"
 
             game = DialogReinforceModel1(Agent_1=agent_1,
                                            Agent_2=agent_2,

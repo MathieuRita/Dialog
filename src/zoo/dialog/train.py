@@ -14,12 +14,13 @@ from src.zoo.dialog.features import OneHotLoader, UniformLoader
 from src.zoo.dialog.archs import Sender, Receiver
 from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
-from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates
 from src.core.util import dump_sender_receiver_impatient
 #Dialog
 from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforceBaseline,DialogReinforceModel1
-from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1
-from src.core.trainers import TrainerDialog, TrainerDialogModel1
+from src.core.reinforce_wrappers import AgentModel2,DialogReinforceModel2
+from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates
+from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2
+from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2
 
 
 def get_params(params):
@@ -157,6 +158,64 @@ def loss_impatient(sender_input, _message, message_length, _receiver_input, rece
 
     return loss, {'acc': acc}, crible_acc
 
+def loss_model_2(sender_input, _message, message_length, _receiver_input, receiver_output, output_lm, _labels):
+
+    """
+    Compute the loss function for the Impatient Listener.
+    It is equal to the average cross entropy of all the intermediate predictions
+
+    Params:
+    - sender_input: ground truth 1-hot vector | size=(batch_size,n_features)
+    - receiver_output: receiver predictions | size=(batch_size,max_len,n_features)
+    - message_lengh: message length | size=(batch_size)
+
+    Returns:
+    - loss: |  size= ????
+    - {acc:acc}: mean accuracy | size=(batch_size)
+    - crible_acc: accuracy by position | size=(batch_size,max_len)
+    """
+
+    # 1. len_mask selects only the symbols before EOS-token
+    to_onehot=torch.eye(_message.size(1)).to("cuda")
+    to_onehot=torch.cat((to_onehot,torch.zeros((1,_message.size(1))).to("cuda")),0)
+    len_mask=[]
+    for i in range(message_length.size(0)):
+      len_mask.append(to_onehot[message_length[i]])
+    len_mask=torch.stack(len_mask,dim=0)
+
+    len_mask=torch.cumsum(len_mask,dim=1)
+    len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
+
+    # 2. coef applies weights on each position. By default it is equal
+    coef=(1/message_length.to(float)).repeat(_message.size(1),1).transpose(1,0) # useless ?
+    len_mask.mul_((coef))
+    len_mask.mul_((1/len_mask.sum(1)).repeat((_message.size(1),1)).transpose(1,0))
+
+    # Test: change positional wieghts
+    #coef2=coef*torch.arange(_message.size(1),0,-1).repeat(_message.size(0),1).to("cuda")
+
+    # 3. Loss candidate
+    acc = (receiver_output[:,-1,:].argmax(dim=1) == sender_input.argmax(dim=1)).detach().float()
+    loss = F.cross_entropy(receiver_output[:,-1,:], sender_input.argmax(dim=1), reduction="none")
+
+    # 4. Loss language model
+
+    output_lm = output_lm[:,:-1,:]
+    target_lm = _message[:,1:]
+
+    output_lm=output_lm.reshape((output_lm.size(0)*output_lm.size(1),output_lm.size(2)))
+    target_lm=target_lm.reshape(target_lm.size(0)*target_lm.size(1))
+
+    acc_lm = (output_lm.argmax(dim=1) == target_lm).detach().float()
+    loss_lm = F.cross_entropy(output_lm, target_lm, reduction="none")
+
+    loss_lm = loss_lm.reshape((loss.size(0),loss_lm.size(0)//loss.size(0)))
+    acc_lm = acc_lm.reshape((acc.size(0),acc_lm.size(0)//acc.size(0)))
+
+    loss_lm = loss_lm.mean(dim=1)
+    acc_lm = acc_lm.mean(dim=1)
+
+    return loss, loss_lm, {'acc': acc, "acc_lm": acc_lm}
 
 def dump(game, n_features, device, gs_mode, epoch):
     # tiny "dataset"
@@ -358,6 +417,67 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    return acc_vec_1, messages_1, acc_vec_2, messages_2
+
+def dump_dialog_model_2(game, n_features, device, gs_mode, epoch):
+    # tiny "dataset"
+    dataset = [[torch.eye(n_features).to(device), None]]
+
+    sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_1, \
+    sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_2, _ = \
+        dump_sender_receiver_dialog_model_2(game, dataset, gs=gs_mode, device=device, variable_length=True)
+
+
+    print("Language 1 (Agent 1 -> Agent 2)")
+
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_1=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_1):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_1[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%50==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    print("Language 2 (Agent 2 -> Agent 1)")
+
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_2=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_2):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_2[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%50==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
 
     return acc_vec_1, messages_1, acc_vec_2, messages_2
@@ -586,11 +706,11 @@ def main(params):
                                                force_eos=force_eos)
 
             receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
-            receiver_1 = core.RnnReceiverWithHiddenStates(receiver_1, opts.vocab_size, opts.receiver_embedding,
+            receiver_1 = RnnReceiverWithHiddenStates(receiver_1, opts.vocab_size, opts.receiver_embedding,
                                                                    opts.receiver_hidden, cell=opts.receiver_cell,
-                                                                   num_layers=opts.receiver_num_layers)
+                                                                   num_layers=opts.receiver_num_layers,max_len=opts.max_len,n_features=opts.n_features)
 
-            agent_1=AgentBaseline(receiver = receiver_1, sender = sender_1)
+            agent_1=AgentModel2(receiver = receiver_1, sender = sender_1)
 
             "Agent 2"
 
@@ -601,15 +721,15 @@ def main(params):
                                                force_eos=force_eos)
 
             receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
-            receiver_2 = core.RnnReceiverWithHiddenStates(receiver_2, opts.vocab_size, opts.receiver_embedding,
+            receiver_2 = RnnReceiverWithHiddenStates(receiver_2, opts.vocab_size, opts.receiver_embedding,
                                                            opts.receiver_hidden, cell=opts.receiver_cell,
-                                                           num_layers=opts.receiver_num_layers)
+                                                           num_layers=opts.receiver_num_layers,max_len=opts.max_len,n_features=opts.n_features)
 
-            agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
+            agent_2=AgentModel2(receiver = receiver_2, sender = sender_2)
 
             "Game"
 
-            game = DialogReinforceModel1(Agent_1=agent_1,
+            game = DialogReinforceModel2(Agent_1=agent_1,
                                            Agent_2=agent_2,
                                            loss=loss,
                                            sender_entropy_coeff=opts.sender_entropy_coeff,
@@ -619,13 +739,11 @@ def main(params):
                                            reg=False,
                                            device=device)
 
-            optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
-            optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
-            optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
-            optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+            optimizer_1 = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.parameters()))
+            optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.parameters()))
 
-            trainer = TrainerDialogModel1(game=game, optimizer_sender_1=optimizer_sender_1, optimizer_sender_2=optimizer_sender_2, \
-                                          optimizer_receiver_1=optimizer_receiver_1, optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
+            trainer = TrainerDialogModel2(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, \
+                                          train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
 
@@ -649,6 +767,8 @@ def main(params):
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
             elif opts.model=="model_1":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
+            elif opts.model=="model_2":
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_2(trainer.game, opts.n_features, device, False,epoch)
 
         # Convert to numpy to save messages
         all_messages_1=[]

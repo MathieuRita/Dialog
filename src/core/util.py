@@ -1375,3 +1375,110 @@ def dump_sender_receiver_dialog_model_1(game: torch.nn.Module,
     game.train(mode=train_state)
 
     return sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_11,receiver_outputs_12, sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_21,receiver_outputs_22, labels
+
+
+def dump_sender_receiver_dialog_model_2(game: torch.nn.Module,
+                                         dataset: 'torch.utils.data.DataLoader',
+                                         gs: bool, variable_length: bool,
+                                         device: Optional[torch.device] = None,
+                                         impatient = False):
+    """
+    A tool to dump the interaction between Sender and Receiver
+    :param game: A Game instance
+    :param dataset: Dataset of inputs to be used when analyzing the communication
+    :param gs: whether Gumbel-Softmax relaxation was used during training
+    :param variable_length: whether variable-length communication is used
+    :param device: device (e.g. 'cuda') to be used
+    :return:
+    """
+    train_state = game.training  # persist so we restore it back
+    game.eval()
+
+    device = device if device is not None else common_opts.device
+
+    sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_1 = [], [], [], []
+    sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_2 = [], [], [], []
+    labels = []
+
+    with torch.no_grad():
+        for batch in dataset:
+            # by agreement, each batch is (sender_input, labels) plus optional (receiver_input)
+            sender_input = move_to(batch[0], device)
+            receiver_input = None if len(batch) == 2 else move_to(batch[2], device)
+
+            message_1 = game.agent_1.sender(sender_input)
+            message_2 = game.agent_2.sender(sender_input)
+
+            # Under GS, the only output is a message; under Reinforce, two additional tensors are returned.
+            # We don't need them.
+            if not gs: message_1 = message_1[0]
+            if not gs: message_2 = message_2[0]
+
+
+            output_1 = game.agent_2.receiver(message_1, receiver_input)
+            output_2 = game.agent_1.receiver(message_2, receiver_input)
+
+            if not gs: output_1 = output_1[0]
+            if not gs: output_2 = output_2[0]
+
+            output_1=output_1[:,-1,:]
+            output_2=output_2[:,-1,:]
+
+            if batch[1] is not None:
+                labels.extend(batch[1])
+
+            if isinstance(sender_input, list) or isinstance(sender_input, tuple):
+                sender_inputs_1.extend(zip(*sender_input))
+                sender_inputs_2.extend(zip(*sender_input))
+            else:
+                sender_inputs_1.extend(sender_input)
+                sender_inputs_2.extend(sender_input)
+
+            if receiver_input is not None:
+                receiver_inputs_1.extend(receiver_input)
+                receiver_inputs_2.extend(receiver_input)
+
+            if gs: message_1 = message_1.argmax(dim=-1)  # actual symbols instead of one-hot encoded
+            if gs: message_2 = message_2.argmax(dim=-1)  # actual symbols instead of one-hot encoded
+
+            if not variable_length:
+                messages_1.extend(message_2)
+                receiver_outputs_1.extend(output_1)
+                messages_2.extend(message_2)
+                receiver_outputs_2.extend(output_2)
+            else:
+                # A trickier part is to handle EOS in the messages. It also might happen that not every message has EOS.
+                # We cut messages at EOS if it is present or return the entire message otherwise. Note, EOS id is always
+                # set to 0.
+
+                for i in range(message_1.size(0)):
+                    eos_positions_1 = (message_1[i, :] == 0).nonzero()
+                    message_end_1 = eos_positions_1[0].item() if eos_positions_1.size(0) > 0 else -1
+                    assert message_end_1 == -1 or message_1[i, message_end_1] == 0
+                    if message_end_1 < 0:
+                        messages_1.append(message_1[i, :])
+                    else:
+                        messages_1.append(message_1[i, :message_end_1 + 1])
+
+                    if gs:
+                        receiver_outputs_1.append(output[i, message_end_1, ...])
+                    else:
+                        receiver_outputs_1.append(output_1[i, ...])
+
+                for i in range(message_2.size(0)):
+                    eos_positions_2 = (message_2[i, :] == 0).nonzero()
+                    message_end_2 = eos_positions_2[0].item() if eos_positions_2.size(0) > 0 else -1
+                    assert message_end_2 == -1 or message_2[i, message_end_2] == 0
+                    if message_end_2 < 0:
+                        messages_2.append(message_2[i, :])
+                    else:
+                        messages_2.append(message_2[i, :message_end_2 + 1])
+
+                    if gs:
+                        receiver_outputs_2.append(output_2[i, message_end_2, ...])
+                    else:
+                        receiver_outputs_2.append(output_2[i, ...])
+
+    game.train(mode=train_state)
+
+    return sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_1, sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_2, labels

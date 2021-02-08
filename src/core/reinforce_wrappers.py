@@ -1510,25 +1510,3 @@ class CompositionalitySenderReceiverRnnReinforce(nn.Module):
     def update_baseline(self, name, value):
         self.n_points[name] += 1
         self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
-
-class CompositionalitySenderImpatientReceiverRnnReinforce(nn.Module):
-    """
-    Implements Sender/Receiver game with training done via Reinforce. Both agents are supposed to
-    return 3-tuples of (output, log-prob of the output, entropy).
-    The game implementation is responsible for handling the end-of-sequence term, so that the optimized loss
-    corresponds either to the position of the eos term (assumed to be 0) or the end of sequence.
-
-    Sender and Receiver can be obtained by applying the corresponding wrappers.
-    `SenderReceiverRnnReinforce` also applies the mean baseline to the loss function to reduce the variance of the
-    gradient estimate.
-
-    >>> sender = nn.Linear(3, 10)
-    >>> sender = RnnSenderReinforce(sender, vocab_size=15, embed_dim=5, hidden_size=10, max_len=10, cell='lstm')
-
-    >>> class Receiver(nn.Module):
-    ...     def __init__(self):
-    ...         super().__init__()
-    ...         self.fc = nn.Linear(5, 3)
-    ...     def forward(self, rnn_output, _input = None):
-    ...         return self.fc(rnn_output)
-    >>> receiver

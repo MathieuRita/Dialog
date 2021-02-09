@@ -16,11 +16,11 @@ from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient
 #Dialog
-from src.core.reinforce_wrappers import  AgentBaseline,DialogReinforceBaseline,DialogReinforceModel1
-from src.core.reinforce_wrappers import AgentModel2,DialogReinforceModel2
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates
+from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3
+from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3
 from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2
-from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2
+from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel2
 
 
 def get_params(params):
@@ -201,7 +201,7 @@ def loss_model_2(sender_input, _message, message_length, _receiver_input, receiv
     # 4. Loss language model
 
     output_lm = output_lm[:,:-1,:]
-    target_lm = _message[:,1:]
+    target_lm = _message[:,1:message_length.max()]
 
     output_lm=output_lm.reshape((output_lm.size(0)*output_lm.size(1),output_lm.size(2)))
     target_lm=target_lm.reshape(target_lm.size(0)*target_lm.size(1))
@@ -216,6 +216,55 @@ def loss_model_2(sender_input, _message, message_length, _receiver_input, receiv
     acc_lm = acc_lm.mean(dim=1)
 
     return loss, loss_lm, {'acc': acc, "acc_lm": acc_lm}
+
+
+def loss_model_3(sender_input, message, receiver_input, receiver_output,message_reconstruction,prob_reconstruction, labels):
+
+    """
+    Compute the loss function for the Impatient Listener.
+    It is equal to the average cross entropy of all the intermediate predictions
+
+    Params:
+    - sender_input: ground truth 1-hot vector | size=(batch_size,n_features)
+    - receiver_output: receiver predictions | size=(batch_size,max_len,n_features)
+    - message_lengh: message length | size=(batch_size)
+
+    Returns:
+    - loss: |  size= ????
+    - {acc:acc}: mean accuracy | size=(batch_size)
+    - crible_acc: accuracy by position | size=(batch_size,max_len)
+    """
+
+    # 1. len_mask selects only the symbols before EOS-token
+    #to_onehot=torch.eye(_message.size(1)).to("cuda")
+    #to_onehot=torch.cat((to_onehot,torch.zeros((1,_message.size(1))).to("cuda")),0)
+    #len_mask=[]
+    #for i in range(message_length.size(0)):
+    #  len_mask.append(to_onehot[message_length[i]])
+    #len_mask=torch.stack(len_mask,dim=0)
+
+    #len_mask=torch.cumsum(len_mask,dim=1)
+    #len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
+
+    # 2. coef applies weights on each position. By default it is equal
+    #coef=(1/message_length.to(float)).repeat(_message.size(1),1).transpose(1,0) # useless ?
+    #len_mask.mul_((coef))
+    #len_mask.mul_((1/len_mask.sum(1)).repeat((_message.size(1),1)).transpose(1,0))
+
+    # Communication task
+
+    acc = (receiver_output.argmax(dim=1) == sender_input.argmax(dim=1)).detach().float()
+    loss = F.cross_entropy(receiver_output, sender_input.argmax(dim=1), reduction="none")
+
+    # Reconstruction task
+    prob_reconstruction = prob_reconstruction.transpose(1,2)
+    prob_reconstruction = prob_reconstruction.reshape((prob_reconstruction.size(0)*prob_reconstruction.size(1),prob_reconstruction.size(2)))
+    message = message.reshape((message.size(0)*message.size(1)))
+
+    acc_imitation = (prob_reconstruction.argmax(dim=1) == message).detach().float()
+    loss_imitation = F.cross_entropy(torch.log(prob_reconstruction), message, reduction="none")
+
+    return loss,loss_imitation {'acc': acc}
 
 def dump(game, n_features, device, gs_mode, epoch):
     # tiny "dataset"
@@ -745,6 +794,60 @@ def main(params):
             trainer = TrainerDialogModel2(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, \
                                           train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+    elif opts.model=="model_3":
+
+        "Agent 1"
+
+        sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+        sender_1 = core.RnnSenderReinforce(sender_1,
+                                           opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                           cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                           force_eos=force_eos)
+
+        receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+        receiver_1 = RnnReceiverDeterministic(receiver_1, opts.vocab_size, opts.receiver_embedding,
+                                                               opts.receiver_hidden, cell=opts.receiver_cell,
+                                                               num_layers=opts.receiver_num_layers,max_len=opts.max_len,n_features=opts.n_features)
+
+        agent_1=AgentModel3(receiver = receiver_1, sender = sender_1)
+
+        "Agent 2"
+
+        sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+        sender_2 = core.RnnSenderReinforce(sender_2,
+                                           opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                           cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                           force_eos=force_eos)
+
+        receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+        receiver_2 = RnnReceiverDeterministic(receiver_2, opts.vocab_size, opts.receiver_embedding,
+                                                       opts.receiver_hidden, cell=opts.receiver_cell,
+                                                       num_layers=opts.receiver_num_layers,max_len=opts.max_len,n_features=opts.n_features)
+
+        agent_2=AgentModel3(receiver = receiver_2, sender = sender_2)
+
+        "Game"
+
+        game = DialogReinforceModel3(Agent_1=agent_1,
+                                       Agent_2=agent_2,
+                                       loss=loss_model_3,
+                                       sender_entropy_coeff=opts.sender_entropy_coeff,
+                                       receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                       length_cost=0.0,
+                                       unigram_penalty=0.0,
+                                       reg=False,
+                                       device=device)
+
+        optimizer_1_comm = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.parameters()))
+        optimizer_1_imitation = core.build_optimizer(list(game.agent_2.sender.parameters()))
+        optimizer_2_comm = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.parameters()))
+        optimizer_2_imitation = core.build_optimizer(list(game.agent_1.sender.parameters()))
+
+        trainer = TrainerDialogModel3(game=game, optimizer_1_comm=optimizer_1_comm, optimizer_1_imitation=optimizer_1_imitation, \
+                                      optimizer_2_comm=optimizer_2_comm, optimizer_2_imitation=optimizer_2_imitation, \
+                                      train_data=train_loader, \
+                                      validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
 
 

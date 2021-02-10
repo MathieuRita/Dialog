@@ -990,7 +990,7 @@ class TrainerDialogModel3:
         with torch.no_grad():
             for batch in self.validation_data:
                 batch = move_to(batch, self.device)
-                optimized_loss_1,loss_1_imitation optimized_loss_2, loss_2_imitation, rest = self.game(*batch)
+                optimized_loss_1,loss_1_imitation, optimized_loss_2, loss_2_imitation, rest = self.game(*batch)
                 mean_loss += 0.25*(optimized_loss_1+loss_1_imitation+optimized_loss_2+loss_2_imitation)
                 mean_rest = _add_dicts(mean_rest, rest)
                 n_batches += 1
@@ -1005,23 +1005,38 @@ class TrainerDialogModel3:
         n_batches = 0
         self.game.train()
         for batch in self.train_data:
-            optimized_loss_1,loss_1_imitation optimized_loss_2, loss_2_imitation, rest = self.game(*batch)
+            optimized_loss_1,loss_1_imitation, optimized_loss_2, loss_2_imitation, rest = self.game(*batch)
             batch = move_to(batch, self.device)
             mean_rest = _add_dicts(mean_rest, rest)
 
+            #if np.random.rand()>0.5:
+            #  self.optimizer_1_comm.zero_grad()
+            #  optimized_loss_1.backward()
+            #  self.optimizer_1_comm.step()
+            #  self.optimizer_1_imitation.zero_grad()
+            #  loss_1_imitation.backward()
+            #  self.optimizer_1_imitation.step()
+            #else:
+            #  self.optimizer_2_comm.zero_grad()
+            #  optimized_loss_2.backward()
+            #  self.optimizer_2_comm.step()
+            #  self.optimizer_2_imitation.zero_grad()
+            #  loss_2_imitation.backward()
+            #  self.optimizer_2_imitation.step()
+
             if np.random.rand()>0.5:
+              loss_1=0.5*(optimized_loss_1+loss_1_imitation)
               self.optimizer_1_comm.zero_grad()
-              optimized_loss_1.backward()
-              self.optimizer_1.step()
               self.optimizer_1_imitation.zero_grad()
-              loss_1_imitation.backward()
+              optimized_loss_1.backward()
+              self.optimizer_1_comm.step()
               self.optimizer_1_imitation.step()
             else:
+              loss_2=0.5*(optimized_loss_2+loss_2_imitation)
               self.optimizer_2_comm.zero_grad()
-              optimized_loss_2.backward()
-              self.optimizer_2.step()
               self.optimizer_2_imitation.zero_grad()
-              loss_2_imitation.backward()
+              loss_2.backward()
+              self.optimizer_2_comm.step()
               self.optimizer_2_imitation.step()
 
             n_batches += 1

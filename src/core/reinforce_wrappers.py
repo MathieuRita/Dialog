@@ -277,7 +277,7 @@ class RnnSenderReinforceModel3(nn.Module):
         :param force_eos: if set to True, each message is extended by an EOS symbol. To ensure that no message goes
         beyond `max_len`, Sender only generates `max_len - 1` symbols from an RNN cell and appends EOS.
         """
-        super(RnnSenderReinforce, self).__init__()
+        super(RnnSenderReinforceModel3, self).__init__()
         self.agent = agent
 
         self.force_eos = force_eos
@@ -352,7 +352,10 @@ class RnnSenderReinforceModel3(nn.Module):
             sequence.append(x)
 
         sequence = torch.stack(sequence).permute(1, 0)
-        logits = torch.stack(logits).permute(1, 0)
+        if imitate:
+          logits = torch.stack(logits).permute(1,2, 0)
+        else:
+          logits = torch.stack(logits).permute(1, 0)
         entropy = torch.stack(entropy).permute(1, 0)
 
         if self.force_eos:
@@ -458,11 +461,16 @@ class RnnReceiverDeterministic(nn.Module):
             entropy=entropy.to(agent_output.device)
             logits=logits.to(agent_output.device)
 
+            det_logits=torch.zeros(agent_output.size(0)).to(agent_output.device)
+            det_entropy=det_logits
+
+            return agent_output, logits, entropy, det_logits, det_entropy
+
         else:
             logits = torch.zeros(agent_output.size(0)).to(agent_output.device)
             entropy = logits
 
-        return agent_output, logits, entropy
+            return agent_output, logits, entropy
 
 class RnnReceiverImpatient(nn.Module):
     """
@@ -690,13 +698,13 @@ class AgentModel3(nn.Module):
 
       return self.sender(sender_input)
 
-    def receive(self,message, receiver_input, message_lengths):
+    def receive(self,message, receiver_input, message_lengths,imitate=True):
 
-      return self.receiver(message, receiver_input, message_lengths)
+      return self.receiver(message, receiver_input, message_lengths,imitate)
 
-    def imitate(self,sender_input):
+    def imitate(self,sender_input,imitate=True):
 
-      return self.sender(sender_input)
+      return self.sender(sender_input,imitate)
 
 class DialogReinforceBaseline(nn.Module):
 
@@ -1293,7 +1301,7 @@ class DialogReinforceModel3(nn.Module):
         """
 
         """
-        super(DialogReinforceBaseline, self).__init__()
+        super(DialogReinforceModel3, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
         self.sender_entropy_coeff = sender_entropy_coeff
@@ -1316,7 +1324,7 @@ class DialogReinforceModel3(nn.Module):
         message_1, log_prob_s_1, entropy_s_1 = self.agent_1.send(sender_input)
         message_lengths_1 = find_lengths(message_1)
 
-        receiver_output_1, log_prob_r_1, entropy_r_1 = self.agent_2.receive(message_1, receiver_input, message_lengths_1,imitate=True)
+        receiver_output_1, prob_r_1, _ , log_prob_r_1, entropy_r_1 = self.agent_2.receive(message_1, receiver_input, message_lengths_1,imitate=True)
 
         candidates_1=receiver_output_1.argmax(dim=1)
 
@@ -1325,8 +1333,8 @@ class DialogReinforceModel3(nn.Module):
         loss_1_comm, loss_1_imitation, rest_1 = self.loss(sender_input, message_1, receiver_input, receiver_output_1,message_reconstruction_1,prob_reconstruction_1, labels)
 
         # Imitation loss weighted by likelihood of candidate
-        loss_1_imitation = loss_1_imitation * log_prob_r_1
-        loss_1_imitation=loss_1_imitation.sum()
+        loss_1_imitation = loss_1_imitation * prob_r_1.max(1).values
+        loss_1_imitation=loss_1_imitation.mean()
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_1 = torch.zeros_like(entropy_r_1)
@@ -1357,7 +1365,7 @@ class DialogReinforceModel3(nn.Module):
         optimized_loss_1 += loss_1_comm.mean()
 
         if self.training:
-            self.update_baseline('loss_1', loss_1)
+            self.update_baseline('loss_1', loss_1_comm)
             self.update_baseline('length_1', length_loss_1)
 
         for k, v in rest_1.items():
@@ -1374,17 +1382,17 @@ class DialogReinforceModel3(nn.Module):
         message_2, log_prob_s_2, entropy_s_2 = self.agent_2.send(sender_input)
         message_lengths_2 = find_lengths(message_2)
 
-        receiver_output_2, log_prob_r_2, entropy_r_2 = self.agent_1.receive(message_2, receiver_input, message_lengths_2,imitate=True)
+        receiver_output_2, prob_r_2, _ , log_prob_r_2, entropy_r_2 = self.agent_1.receive(message_2, receiver_input, message_lengths_2,imitate=True)
 
         candidates_2=receiver_output_2.argmax(dim=1)
 
         message_reconstruction_2, prob_reconstruction_2, _ = self.agent_1.imitate(sender_input,imitate=True)
 
-        loss_2_comm, loss_2_imitation, rest_1 = self.loss(sender_input, message_2, receiver_input, receiver_output_2,message_reconstruction_2,prob_reconstruction_2, labels)
+        loss_2_comm, loss_2_imitation, rest_2 = self.loss(sender_input, message_2, receiver_input, receiver_output_2,message_reconstruction_2,prob_reconstruction_2, labels)
 
         # Imitation loss weighted by likelihood of candidate
-        loss_2_imitation = loss_2_imitation * log_prob_r_2
-        loss_2_imitation=loss_2_imitation.sum()
+        loss_2_imitation = loss_2_imitation * prob_r_2.max(1).values
+        loss_2_imitation=loss_2_imitation.mean()
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_2 = torch.zeros_like(entropy_r_2)
@@ -1438,7 +1446,7 @@ class DialogReinforceModel3(nn.Module):
         rest['mean_length']=self.loss_weights[0]*rest_1['mean_length'] + self.loss_weights[1]* rest_2['mean_length']
         rest['acc']=self.loss_weights[0]*rest_1['acc'] + self.loss_weights[1]* rest_2['acc']
 
-        return optimized_loss_1,loss_1_imitation optimized_loss_2, loss_2_imitation, rest
+        return optimized_loss_1,loss_1_imitation, optimized_loss_2, loss_2_imitation, rest
 
     def update_baseline(self, name, value):
         self.n_points[name] += 1

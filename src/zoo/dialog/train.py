@@ -16,11 +16,11 @@ from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient
 #Dialog
-from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates
+from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
 from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3
 from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3
 from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2
-from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel2
+from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3
 
 
 def get_params(params):
@@ -264,7 +264,13 @@ def loss_model_3(sender_input, message, receiver_input, receiver_output,message_
     acc_imitation = (prob_reconstruction.argmax(dim=1) == message).detach().float()
     loss_imitation = F.cross_entropy(torch.log(prob_reconstruction), message, reduction="none")
 
-    return loss,loss_imitation {'acc': acc}
+    loss_imitation = loss_imitation.reshape((loss.size(0),loss_imitation.size(0)//loss.size(0)))
+    acc_imitation = acc_imitation.reshape((acc.size(0),acc_imitation.size(0)//acc.size(0)))
+
+    loss_imitation = loss_imitation.mean(dim=1) # Add EOS mask
+    acc_imitation = acc_imitation.mean(dim=1)
+
+    return loss,loss_imitation, {'acc': acc}
 
 def dump(game, n_features, device, gs_mode, epoch):
     # tiny "dataset"
@@ -795,59 +801,59 @@ def main(params):
                                           train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
-    elif opts.model=="model_3":
+        elif opts.model=="model_3":
 
-        "Agent 1"
+            "Agent 1"
 
-        sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
-        sender_1 = core.RnnSenderReinforce(sender_1,
-                                           opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
-                                           cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
-                                           force_eos=force_eos)
+            sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_1 = RnnSenderReinforceModel3(sender_1,
+                                               opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                               cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                               force_eos=force_eos)
 
-        receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
-        receiver_1 = RnnReceiverDeterministic(receiver_1, opts.vocab_size, opts.receiver_embedding,
-                                                               opts.receiver_hidden, cell=opts.receiver_cell,
-                                                               num_layers=opts.receiver_num_layers,max_len=opts.max_len,n_features=opts.n_features)
+            receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_1 = core.RnnReceiverDeterministic(receiver_1, opts.vocab_size, opts.receiver_embedding,
+                                                                   opts.receiver_hidden, cell=opts.receiver_cell,
+                                                                   num_layers=opts.receiver_num_layers)
 
-        agent_1=AgentModel3(receiver = receiver_1, sender = sender_1)
+            agent_1=AgentModel3(receiver = receiver_1, sender = sender_1)
 
-        "Agent 2"
+            "Agent 2"
 
-        sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
-        sender_2 = core.RnnSenderReinforce(sender_2,
-                                           opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
-                                           cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
-                                           force_eos=force_eos)
+            sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_2 = RnnSenderReinforceModel3(sender_2,
+                                               opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                               cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                               force_eos=force_eos)
 
-        receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
-        receiver_2 = RnnReceiverDeterministic(receiver_2, opts.vocab_size, opts.receiver_embedding,
-                                                       opts.receiver_hidden, cell=opts.receiver_cell,
-                                                       num_layers=opts.receiver_num_layers,max_len=opts.max_len,n_features=opts.n_features)
+            receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_2 = core.RnnReceiverDeterministic(receiver_2, opts.vocab_size, opts.receiver_embedding,
+                                                           opts.receiver_hidden, cell=opts.receiver_cell,
+                                                           num_layers=opts.receiver_num_layers)
 
-        agent_2=AgentModel3(receiver = receiver_2, sender = sender_2)
+            agent_2=AgentModel3(receiver = receiver_2, sender = sender_2)
 
-        "Game"
+            "Game"
 
-        game = DialogReinforceModel3(Agent_1=agent_1,
-                                       Agent_2=agent_2,
-                                       loss=loss_model_3,
-                                       sender_entropy_coeff=opts.sender_entropy_coeff,
-                                       receiver_entropy_coeff=opts.receiver_entropy_coeff,
-                                       length_cost=0.0,
-                                       unigram_penalty=0.0,
-                                       reg=False,
-                                       device=device)
+            game = DialogReinforceModel3(Agent_1=agent_1,
+                                           Agent_2=agent_2,
+                                           loss=loss_model_3,
+                                           sender_entropy_coeff=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           length_cost=0.0,
+                                           unigram_penalty=0.0,
+                                           reg=False,
+                                           device=device)
 
-        optimizer_1_comm = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.parameters()))
-        optimizer_1_imitation = core.build_optimizer(list(game.agent_2.sender.parameters()))
-        optimizer_2_comm = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.parameters()))
-        optimizer_2_imitation = core.build_optimizer(list(game.agent_1.sender.parameters()))
+            optimizer_1_comm = core.build_optimizer(list(game.agent_1.sender.parameters())+list(game.agent_2.receiver.parameters()))
+            optimizer_1_imitation = core.build_optimizer(list(game.agent_2.sender.parameters()))
+            optimizer_2_comm = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters()))
+            optimizer_2_imitation = core.build_optimizer(list(game.agent_1.sender.parameters()))
 
-        trainer = TrainerDialogModel3(game=game, optimizer_1_comm=optimizer_1_comm, optimizer_1_imitation=optimizer_1_imitation, \
-                                      optimizer_2_comm=optimizer_2_comm, optimizer_2_imitation=optimizer_2_imitation, \
-                                      train_data=train_loader, \
-                                      validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+            trainer = TrainerDialogModel3(game=game, optimizer_1_comm=optimizer_1_comm, optimizer_1_imitation=optimizer_1_imitation, \
+                                          optimizer_2_comm=optimizer_2_comm, optimizer_2_imitation=optimizer_2_imitation, \
+                                          train_data=train_loader, \
+                                          validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
 
 
@@ -872,6 +878,8 @@ def main(params):
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
             elif opts.model=="model_2":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_2(trainer.game, opts.n_features, device, False,epoch)
+            elif opts.model=="model_3":
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
 
         # Convert to numpy to save messages
         all_messages_1=[]

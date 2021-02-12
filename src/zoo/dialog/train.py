@@ -18,9 +18,9 @@ from src.core.util import dump_sender_receiver_impatient
 #Dialog
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
 from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3
-from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3
+from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4
 from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2
-from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3
+from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4
 
 
 def get_params(params):
@@ -853,6 +853,57 @@ def main(params):
             trainer = TrainerDialogModel3(game=game, optimizer_1_comm=optimizer_1_comm, optimizer_1_imitation=optimizer_1_imitation, \
                                           optimizer_2_comm=optimizer_2_comm, optimizer_2_imitation=optimizer_2_imitation, \
                                           train_data=train_loader, \
+                                          validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+        elif opts.model=="model_4":
+
+            "Agent 1"
+
+            sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_1 = core.RnnSenderReinforceModel3(sender_1,
+                                       opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                       cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                       force_eos=force_eos)
+
+            receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_1 = core.RnnReceiverDeterministic(receiver_1, opts.vocab_size, opts.receiver_embedding,
+                                                   opts.receiver_hidden, cell=opts.receiver_cell,
+                                                   num_layers=opts.receiver_num_layers)
+
+            agent_1=AgentBaseline(receiver = receiver_1, sender = sender_1)
+
+            "Agent 2"
+
+            sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_2 = core.RnnSenderReinforceModel3(sender_2,
+                                       opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
+                                       cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
+                                       force_eos=force_eos)
+
+            receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_2 = core.RnnReceiverDeterministic(receiver_2, opts.vocab_size, opts.receiver_embedding,
+                                                   opts.receiver_hidden, cell=opts.receiver_cell,
+                                                   num_layers=opts.receiver_num_layers)
+
+            agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
+
+            game = DialogReinforceModel4(Agent_1=agent_1,
+                                           Agent_2=agent_2,
+                                           loss=loss_model_3,
+                                           sender_entropy_coeff=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           length_cost=0.0,
+                                           unigram_penalty=0.0,
+                                           reg=False,
+                                           device=device)
+
+            optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
+            optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
+            optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
+            optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+
+            trainer = TrainerDialogModel4(game=game, optimizer_sender_1=optimizer_sender_1, optimizer_sender_2=optimizer_sender_2, \
+                                          optimizer_receiver_1=optimizer_receiver_1, optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
 

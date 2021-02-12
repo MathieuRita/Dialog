@@ -860,7 +860,7 @@ def main(params):
             "Agent 1"
 
             sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
-            sender_1 = core.RnnSenderReinforceModel3(sender_1,
+            sender_1 = RnnSenderReinforceModel3(sender_1,
                                        opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
                                        cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
                                        force_eos=force_eos)
@@ -870,12 +870,12 @@ def main(params):
                                                    opts.receiver_hidden, cell=opts.receiver_cell,
                                                    num_layers=opts.receiver_num_layers)
 
-            agent_1=AgentBaseline(receiver = receiver_1, sender = sender_1)
+            agent_1=AgentModel3(receiver = receiver_1, sender = sender_1)
 
             "Agent 2"
 
             sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
-            sender_2 = core.RnnSenderReinforceModel3(sender_2,
+            sender_2 =RnnSenderReinforceModel3(sender_2,
                                        opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
                                        cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
                                        force_eos=force_eos)
@@ -885,7 +885,7 @@ def main(params):
                                                    opts.receiver_hidden, cell=opts.receiver_cell,
                                                    num_layers=opts.receiver_num_layers)
 
-            agent_2=AgentBaseline(receiver = receiver_2, sender = sender_2)
+            agent_2=AgentModel3(receiver = receiver_2, sender = sender_2)
 
             game = DialogReinforceModel4(Agent_1=agent_1,
                                            Agent_2=agent_2,
@@ -931,6 +931,9 @@ def main(params):
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_2(trainer.game, opts.n_features, device, False,epoch)
             elif opts.model=="model_3":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
+            elif opts.model=="model_4":
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
+
 
         # Convert to numpy to save messages
         all_messages_1=[]

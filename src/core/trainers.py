@@ -1190,7 +1190,7 @@ class TrainerDialogModel4:
         with torch.no_grad():
             for batch in self.validation_data:
                 batch = move_to(batch, self.device)
-                optimized_loss_11,loss_11_imitation, optimized_loss_12,loss_12_imitation, optimized_loss_21,loss_21_imitation, optimized_loss_22,loss_22_imitation, rest11,rest12,rest21,rest22 = self.game(*batch)
+                optimized_loss_11,loss_11_imitation, optimized_loss_12,loss_12_imitation, optimized_loss_21,loss_21_imitation, optimized_loss_22,loss_22_imitation, rest = self.game(*batch)
                 mean_loss += 0.25*(optimized_loss_11 + optimized_loss_12 + optimized_loss_21 + optimized_loss_22)
                 mean_rest = _add_dicts(mean_rest, rest)
                 n_batches += 1
@@ -1205,7 +1205,7 @@ class TrainerDialogModel4:
         n_batches = 0
         self.game.train()
         for batch in self.train_data:
-            optimized_loss_11,loss_11_imitation, optimized_loss_12,loss_12_imitation, optimized_loss_21,loss_21_imitation, optimized_loss_22,loss_22_imitation, rest11,rest12,rest21,rest22 = self.game(*batch)
+            optimized_loss_11,loss_11_imitation, optimized_loss_12,loss_12_imitation, optimized_loss_21,loss_21_imitation, optimized_loss_22,loss_22_imitation, rest= self.game(*batch)
             batch = move_to(batch, self.device)
             mean_rest = _add_dicts(mean_rest, rest)
 

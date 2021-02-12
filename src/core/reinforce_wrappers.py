@@ -177,6 +177,7 @@ class RnnSenderReinforce(nn.Module):
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.sos_embedding = nn.Parameter(torch.zeros(embed_dim))
         self.embed_dim = embed_dim
+        self.norm = nn.LayerNorm(hidden_size)
         self.vocab_size = vocab_size
         self.num_layers = num_layers
         self.cells = None
@@ -213,9 +214,11 @@ class RnnSenderReinforce(nn.Module):
             for i, layer in enumerate(self.cells):
                 if isinstance(layer, nn.LSTMCell):
                     h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
+                    h_t = self.norm(h_t)
                     prev_c[i] = c_t
                 else:
                     h_t = layer(input, prev_hidden[i])
+                    h_t = self.norm(h_t)
                 prev_hidden[i] = h_t
                 input = h_t
 
@@ -287,6 +290,7 @@ class RnnSenderReinforceModel3(nn.Module):
             self.max_len -= 1
 
         self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
+        self.norm = torch.nn.LayerNorm(hidden_size)
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.sos_embedding = nn.Parameter(torch.zeros(embed_dim))
         self.embed_dim = embed_dim
@@ -326,9 +330,11 @@ class RnnSenderReinforceModel3(nn.Module):
             for i, layer in enumerate(self.cells):
                 if isinstance(layer, nn.LSTMCell):
                     h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
+                    h_t = self.norm(h_t)
                     prev_c[i] = c_t
                 else:
                     h_t = layer(input, prev_hidden[i])
+                    h_t = self.norm(h_t)
                 prev_hidden[i] = h_t
                 input = h_t
 
@@ -448,9 +454,11 @@ class RnnReceiverDeterministic(nn.Module):
         super(RnnReceiverDeterministic, self).__init__()
         self.agent = agent
         self.encoder = RnnEncoder(vocab_size, embed_dim, hidden_size, cell, num_layers)
+        self.norm = nn.LayerNorm(hidden_size)
 
     def forward(self, message, input=None, lengths=None,imitate=False):
         encoded = self.encoder(message)
+        encoded=self.norm(encoded)
         agent_output = self.agent(encoded, input)
 
         if imitate:
@@ -1506,7 +1514,7 @@ class DialogReinforceModel4(nn.Module):
 
         message_reconstruction_12, prob_reconstruction_12, _ = self.agent_2.imitate(sender_input,imitate=True)
 
-        loss_12_comm, loss_12_imitation, rest_12 = self.loss(sender_input, message_12, receiver_input, receiver_output_12,message_reconstruction_12,prob_reconstruction_12, labels)
+        loss_12_comm, loss_12_imitation, rest_12 = self.loss(sender_input, message_1, receiver_input, receiver_output_12,message_reconstruction_12,prob_reconstruction_12, labels)
 
         # Imitation loss weighted by likelihood of candidate
         loss_12_imitation = loss_12_imitation * prob_r_12.max(1).values
@@ -1563,7 +1571,7 @@ class DialogReinforceModel4(nn.Module):
 
         message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(sender_input,imitate=True)
 
-        loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_11, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
+        loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
 
         # Imitation loss weighted by likelihood of candidate
         loss_11_imitation = loss_11_imitation * prob_r_11.max(1).values
@@ -1611,7 +1619,7 @@ class DialogReinforceModel4(nn.Module):
 
         message_reconstruction_21, prob_reconstruction_21, _ = self.agent_1.imitate(sender_input,imitate=True)
 
-        loss_21_comm, loss_21_imitation, rest_21 = self.loss(sender_input, message_21, receiver_input, receiver_output_21,message_reconstruction_21,prob_reconstruction_21, labels)
+        loss_21_comm, loss_21_imitation, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21,message_reconstruction_21,prob_reconstruction_21, labels)
 
         # Imitation loss weighted by likelihood of candidate
         loss_21_imitation = loss_21_imitation * prob_r_21.max(1).values
@@ -1669,7 +1677,7 @@ class DialogReinforceModel4(nn.Module):
 
         message_reconstruction_22, prob_reconstruction_22, _ = self.agent_2.imitate(sender_input,imitate=True)
 
-        loss_22_comm, loss_22_imitation, rest_22 = self.loss(sender_input, message_22, receiver_input, receiver_output_22,message_reconstruction_22,prob_reconstruction_22, labels)
+        loss_22_comm, loss_22_imitation, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22,message_reconstruction_22,prob_reconstruction_22, labels)
 
         # Imitation loss weighted by likelihood of candidate
         loss_22_imitation = loss_22_imitation * prob_r_22.max(1).values
@@ -1725,11 +1733,13 @@ class DialogReinforceModel4(nn.Module):
         rest['acc']=self.loss_weights[0][0]*rest_11['acc'] + self.loss_weights[0][1]*rest_12['acc']+ \
                          self.loss_weights[1][0]*rest_21['acc'] + self.loss_weights[1][1]*rest_22['acc']
 
-        return optimized_loss_11,loss_11_imitation, optimized_loss_12,loss_12_imitation, optimized_loss_21,loss_21_imitation, optimized_loss_22,loss_22_imitation, rest11,rest12,rest21,rest22
+        return optimized_loss_11,loss_11_imitation, optimized_loss_12,loss_12_imitation, optimized_loss_21,loss_21_imitation, optimized_loss_22,loss_22_imitation, rest
 
     def update_baseline(self, name, value):
         self.n_points[name] += 1
         self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
+
+
 
 class SenderReceiverRnnReinforce(nn.Module):
     """

@@ -177,7 +177,8 @@ class RnnSenderReinforce(nn.Module):
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.sos_embedding = nn.Parameter(torch.zeros(embed_dim))
         self.embed_dim = embed_dim
-        self.norm = nn.LayerNorm(hidden_size)
+        self.norm_h = nn.LayerNorm(hidden_size)
+        self.norm_c = nn.LayerNorm(hidden_size)
         self.vocab_size = vocab_size
         self.num_layers = num_layers
         self.cells = None
@@ -214,11 +215,12 @@ class RnnSenderReinforce(nn.Module):
             for i, layer in enumerate(self.cells):
                 if isinstance(layer, nn.LSTMCell):
                     h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
-                    h_t = self.norm(h_t)
+                    h_t = self.norm_h(h_t)
+                    c_t = self.norm_c(c_t)
                     prev_c[i] = c_t
                 else:
                     h_t = layer(input, prev_hidden[i])
-                    h_t = self.norm(h_t)
+                    h_t = self.norm_h(h_t)
                 prev_hidden[i] = h_t
                 input = h_t
 

@@ -292,7 +292,8 @@ class RnnSenderReinforceModel3(nn.Module):
             self.max_len -= 1
 
         self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
-        self.norm = torch.nn.LayerNorm(hidden_size)
+        self.norm_h = torch.nn.LayerNorm(hidden_size)
+        self.norm_c = torch.nn.LayerNorm(hidden_size)
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.sos_embedding = nn.Parameter(torch.zeros(embed_dim))
         self.embed_dim = embed_dim
@@ -332,11 +333,12 @@ class RnnSenderReinforceModel3(nn.Module):
             for i, layer in enumerate(self.cells):
                 if isinstance(layer, nn.LSTMCell):
                     h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
-                    h_t = self.norm(h_t)
+                    h_t = self.norm_h(h_t)
+                    c_t = self.norm_h(c_t)
                     prev_c[i] = c_t
                 else:
                     h_t = layer(input, prev_hidden[i])
-                    h_t = self.norm(h_t)
+                    h_t = self.norm_h(h_t)
                 prev_hidden[i] = h_t
                 input = h_t
 
@@ -596,6 +598,8 @@ class RnnReceiverWithHiddenStates(nn.Module):
 
         self.max_len = max_len
         self.hidden_to_output = nn.Linear(hidden_size, n_features)
+        self.norm_h=nn.LayerNorm(hidden_size)
+        self.norm_c=nn.LayerNorm(hidden_size)
         self.encoder = RnnEncoderImpatient(vocab_size, embed_dim, hidden_size, cell, num_layers)
 
     def forward(self, message, input=None, lengths=None):
@@ -608,6 +612,7 @@ class RnnReceiverWithHiddenStates(nn.Module):
 
         for step in range(encoded.size(0)):
             h_t=encoded[step,:,:]
+            h_t=norm_h(h_t)
             step_logits = F.log_softmax(self.hidden_to_output(h_t), dim=1)
             distr = Categorical(logits=step_logits)
             entropy.append(distr.entropy())
@@ -1543,7 +1548,7 @@ class DialogReinforceModel4(nn.Module):
 
         length_loss_12 = message_lengths_1.float() * self.length_cost
 
-        policy_length_loss_12 = ((length_loss_12.float() - self.mean_baseline['length_1']) * effective_log_prob_s_1).mean()
+        policy_length_loss_12 = ((length_loss_12.float() - self.mean_baseline['length_12']) * effective_log_prob_s_1).mean()
         policy_loss_12 = ((loss_12_comm.detach() - self.mean_baseline['loss_12']) * log_prob_12).mean()
 
         optimized_loss_12 = policy_length_loss_12 + policy_loss_12 - weighted_entropy_12
@@ -1587,7 +1592,7 @@ class DialogReinforceModel4(nn.Module):
         length_loss_11 = message_lengths_1.float() * self.length_cost
 
         policy_length_loss_11 = ((length_loss_11.float() - self.mean_baseline['length_1']) * effective_log_prob_s_1).mean()
-        policy_loss_11 = ((loss_11_comm.detach() - self.mean_baseline['loss_1']) * log_prob_11).mean()
+        policy_loss_11 = ((loss_11_comm.detach() - self.mean_baseline['loss_11']) * log_prob_11).mean()
 
         optimized_loss_11 = policy_length_loss_11 + policy_loss_11 - weighted_entropy_11
 

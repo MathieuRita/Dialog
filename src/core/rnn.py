@@ -39,6 +39,8 @@ class RnnEncoder(nn.Module):
 
         self.embedding = nn.Embedding(vocab_size, embed_dim)
 
+        self.norm_h = torch.nn.LayerNorm(hidden_size)
+
     def forward(self, message: torch.Tensor, lengths: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Feeds a sequence into an RNN cell and returns the last hidden state of the last layer.
         Arguments:
@@ -59,6 +61,8 @@ class RnnEncoder(nn.Module):
 
         if isinstance(self.cell, nn.LSTM):
             rnn_hidden, _ = rnn_hidden
+
+        #rnn_hidden=self.norm_h(rnn_hidden)
 
         return rnn_hidden[-1]
 

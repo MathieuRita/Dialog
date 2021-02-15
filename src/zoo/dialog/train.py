@@ -19,7 +19,7 @@ from src.core.util import dump_sender_receiver_impatient,levenshtein
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
 from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedEmbedding
 from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent
-from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2
+from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining
 from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining
 
 
@@ -559,6 +559,41 @@ def dump_dialog_model_2(game, n_features, device, gs_mode, epoch):
 
     return acc_vec_1, messages_1, acc_vec_2, messages_2
 
+def dump_pretraining(game, n_features, device, gs_mode, epoch):
+    # tiny "dataset"
+    dataset = [[torch.eye(n_features).to(device), None]]
+
+    sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_1, _ = \
+        dump_pretraining(game, dataset, gs=gs_mode, device=device, variable_length=True)
+
+
+    print("Language 1 (Agent 1 -> Agent 1)")
+
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_1=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_1):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_1[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%10==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    return acc_vec_1, messages_1
+
 def dump_impatient(game, n_features, device, gs_mode,epoch):
     # tiny "dataset"
     dataset = [[torch.eye(n_features).to(device), None]]
@@ -993,7 +1028,7 @@ def main(params):
                                           optimizer_embedding_1=optimizer_embedding_1,optimizer_embedding_2=optimizer_embedding_2, train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
-        elif model=="pretraining":
+        elif opts.model=="pretraining":
 
             "Agent 1"
 
@@ -1044,9 +1079,9 @@ def main(params):
 
         if not opts.dialog:
             if not opts.impatient:
-                acc_vec,messages=dump(trainer.game, opts.n_features, device, False,epoch)
+                acc_vec_1,messages_1=dump(trainer.game, opts.n_features, device, False,epoch)
             else:
-                acc_vec,messages=dump_impatient(trainer.game, opts.n_features, device, False,epoch)
+                acc_vec_1,messages_1=dump_impatient(trainer.game, opts.n_features, device, False,epoch)
 
         else:
             if opts.model=="baseline":
@@ -1061,32 +1096,50 @@ def main(params):
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
             elif opts.model=="model_5":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
+            elif opts.model=="pretraining":
+                acc_vec_1, messages_1 = dump_pretraining(trainer.game, opts.n_features, device, False,epoch)
 
 
+        if opts.dialog and opts.model!="pretraining":
+            # Convert to numpy to save messages
+            all_messages_1=[]
+            for x in messages_1:
+                x = x.cpu().numpy()
+                all_messages_1.append(x)
+            all_messages_1 = np.asarray(all_messages_1)
 
-        # Convert to numpy to save messages
-        all_messages_1=[]
-        for x in messages_1:
-            x = x.cpu().numpy()
-            all_messages_1.append(x)
-        all_messages_1 = np.asarray(all_messages_1)
+            all_messages_2=[]
+            for x in messages_2:
+                x = x.cpu().numpy()
+                all_messages_2.append(x)
+            all_messages_2 = np.asarray(all_messages_2)
 
-        all_messages_2=[]
-        for x in messages_2:
-            x = x.cpu().numpy()
-            all_messages_2.append(x)
-        all_messages_2 = np.asarray(all_messages_2)
+            if epoch%50==0:
+                torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
+                torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
+                torch.save(agent_2.sender.state_dict(), f"{opts.dir_save}/sender/agent_2_sender_weights_{epoch}.pth")
+                torch.save(agent_2.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_2_receiver_weights_{epoch}.pth")
 
-        if epoch%50==0:
-            torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
-            torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
-            torch.save(agent_2.sender.state_dict(), f"{opts.dir_save}/sender/agent_2_sender_weights_{epoch}.pth")
-            torch.save(agent_2.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_2_receiver_weights_{epoch}.pth")
+            np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
+            np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
+            np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages_2)
+            np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec_2)
 
-        np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
-        np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
-        np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages_2)
-        np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec_2)
+        else:
+            # Convert to numpy to save messages
+            all_messages_1=[]
+            for x in messages_1:
+                x = x.cpu().numpy()
+                all_messages_1.append(x)
+            all_messages_1 = np.asarray(all_messages_1)
+
+            if epoch%10==0:
+                torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
+                torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
+
+            np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
+            np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
+
 
     core.close()
 

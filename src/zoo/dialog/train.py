@@ -1144,8 +1144,8 @@ def main(params):
         if opts.dialog and opts.model!="pretraining":
 
             if opts.entropy_scheduling:
-                game.sender_entropy_coeff_1=0.4*(1-np.mean(acc_vec_1))+0.1
-                game.sender_entropy_coeff_2=0.4*(1-np.mean(acc_vec_2))+0.1
+                game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_1)**10)
+                game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_2)**10)
 
             # Convert to numpy to save messages
             all_messages_1=[]

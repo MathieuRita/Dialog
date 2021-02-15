@@ -393,7 +393,7 @@ def dump_dialog(game, n_features, device, gs_mode, epoch,past_messages_1=None,pa
 
     return acc_vec_1, messages_1, acc_vec_2, messages_2
 
-def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
+def dump_dialog_model_1(game, n_features, device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
     # tiny "dataset"
     dataset = [[torch.eye(n_features).to(device), None]]
 
@@ -508,9 +508,15 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
 
     print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],messages_2[i]) for i in range(len(messages_1))])),flush=True)
 
+    if past_messages_1 is not None:
+        print("Similarity evo language 1 = {}".format(np.mean([levenshtein(messages_1[i],past_messages_1[i]) for i in range(len(messages_1))])),flush=True)
+    if past_messages_2 is not None:
+        print("Similarity evo language 2 = {}".format(np.mean([levenshtein(messages_2[i],past_messages_2[i]) for i in range(len(messages_2))])),flush=True)
+
+
     return acc_vec_1, messages_1, acc_vec_2, messages_2
 
-def dump_dialog_model_2(game, n_features, device, gs_mode, epoch):
+def dump_dialog_model_2(game, n_features, device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
     # tiny "dataset"
     dataset = [[torch.eye(n_features).to(device), None]]
 
@@ -1128,15 +1134,25 @@ def main(params):
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_1":
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
+                if epoch==0:
+                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_2":
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_2(trainer.game, opts.n_features, device, False,epoch)
+                if epoch==0:
+                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_2(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_3":
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
+                if epoch==0:
+                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_4":
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
+                if epoch==0:
+                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_5":
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
+                if epoch==0:
+                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="pretraining":
                 acc_vec_1, messages_1 = dump_pretraining(trainer.game, opts.n_features,pretrained_messages, device, False,epoch)
 

@@ -1980,6 +1980,97 @@ class DialogReinforceModel4(nn.Module):
         self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
 
 
+class PretrainAgent(nn.Module):
+
+    """
+    DialogReinforce implements the Dialog game
+    """
+
+    def __init__(self,
+                 Agent_1,
+                 loss,
+                 pretrained_messages,
+                 sender_entropy_coeff,
+                 receiver_entropy_coeff,
+                 device,
+                 loss_weights=[[0.25,0.25],[0.25,0.25]],
+                 length_cost=0.0,
+                 unigram_penalty=0.0,
+                 reg=False):
+        """
+
+        """
+        super(PretrainAgent, self).__init__()
+        self.agent_1 = Agent_1
+        self.sender_entropy_coeff = sender_entropy_coeff
+        self.receiver_entropy_coeff = receiver_entropy_coeff
+        self.pretrained_messages=pretrained_messages,
+        self.loss = loss
+        self.loss_weights = loss_weights
+        self.length_cost = length_cost
+        self.unigram_penalty = unigram_penalty
+        self.device=device
+        self.mean_baseline = defaultdict(float)
+        self.n_points = defaultdict(float)
+        self.reg=reg
+
+    def forward(self, sender_input, labels, receiver_input=None):
+
+        sender_input=sender_input.to(self.device)
+
+        message_1, log_prob_s_1, entropy_s_1 = self.agent_1.sender(sender_input)
+        message_lengths_1 = find_lengths(message_1)
+
+        "1.1 Agent_1 -> Agent_1"
+
+        #message_11, log_prob_s_11, entropy_s_11 = message_1, log_prob_s_1, entropy_s_1
+
+        receiver_output_11, prob_r_11, _ , log_prob_r_11, entropy_r_11 = self.agent_1.receive(message_1, receiver_input, message_lengths_1,imitate=True)
+
+        pretrained_sender_input = move_to(torch.eye(n_features), device)
+
+        message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(pretrained_sender_input,imitate=True)
+
+        loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_1,pretrained_messages, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
+
+        # Imitation loss weighted by likelihood of candidate
+        loss_11_imitation = loss_11_imitation #* prob_r_11.max(1).values
+        loss_11_imitation=loss_11_imitation.mean()
+
+        weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
+                entropy_r_11.mean() * self.receiver_entropy_coeff
+
+        log_prob_11 = effective_log_prob_s_1 + log_prob_r_11
+
+        length_loss_11 = message_lengths_1.float() * self.length_cost
+
+        policy_length_loss_11 = ((length_loss_11.float() - self.mean_baseline['length_1']) * effective_log_prob_s_1).mean()
+        policy_loss_11 = ((loss_11_comm.detach() - self.mean_baseline['loss_11']) * log_prob_11).mean()
+
+        optimized_loss_11 = policy_length_loss_11 + policy_loss_11 - weighted_entropy_11
+
+        # if the receiver is deterministic/differentiable, we apply the actual loss
+        optimized_loss_11 += loss_11_comm.mean()
+
+        if self.training:
+            self.update_baseline('loss_11', loss_11_comm)
+            self.update_baseline('length_11', length_loss_11)
+
+        for k, v in rest_11.items():
+            rest_11[k] = v.mean().item() if hasattr(v, 'mean') else v
+        rest_11['loss'] = optimized_loss_11.detach().item()
+        rest_11['sender_entropy'] = entropy_s_1.mean().item()
+        rest_11['receiver_entropy'] = entropy_r_11.mean().item()
+        rest_11['original_loss'] = loss_11_comm.mean().item()
+        rest_11['mean_length'] = message_lengths_1.float().mean().item()
+
+        return optimized_loss_11,loss_11_imitation, rest
+
+    def update_baseline(self, name, value):
+        self.n_points[name] += 1
+        self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
+
+
 
 class SenderReceiverRnnReinforce(nn.Module):
     """

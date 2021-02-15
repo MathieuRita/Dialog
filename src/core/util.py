@@ -1503,7 +1503,7 @@ def dump_sender_receiver_dialog_model_2(game: torch.nn.Module,
 
     return sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_1, sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_2, labels
 
-def dump_pretraining(game: torch.nn.Module,
+def dump_pretraining_u(game: torch.nn.Module,
                          dataset: 'torch.utils.data.DataLoader',
                          gs: bool, variable_length: bool,
                          device: Optional[torch.device] = None,

@@ -19,7 +19,7 @@ from src.core.util import dump_sender_receiver_impatient,levenshtein
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
 from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedEmbedding
 from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent
-from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining
+from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining_u
 from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining
 
 
@@ -561,7 +561,7 @@ def dump_pretraining(game, n_features, device, gs_mode, epoch):
     dataset = [[torch.eye(n_features).to(device), None]]
 
     sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_1, _ = \
-        dump_pretraining(game, dataset, gs=gs_mode, device=device, variable_length=True)
+        dump_pretraining_u(game, dataset, gs=gs_mode, device=device, variable_length=True)
 
 
     print("Language 1 (Agent 1 -> Agent 1)")
@@ -1045,11 +1045,11 @@ def main(params):
             "Pretrained_message"
             [[i]+[0]*(opts.max_len-1) for i in range(opts.n_features)]
             pretrained_messages=[]
-            for i in range(opts.vocab_size):
+            for i in range(1,opts.vocab_size):
                 pretrained_messages.append([i]+[0]*(opts.max_len-1))
-            for i in range(opts.vocab_size):
+            for i in range(1,opts.vocab_size):
                 pretrained_messages.append([1]+[i]+[0]*(opts.max_len-2))
-            for i in range(opts.n_features-2*opts.vocab_size):
+            for i in range(1,opts.n_features-2*opts.vocab_size+3):
                 pretrained_messages.append([2]+[i]+[0]*(opts.max_len-2))
 
             pretrained_messages=torch.tensor(pretrained_messages)

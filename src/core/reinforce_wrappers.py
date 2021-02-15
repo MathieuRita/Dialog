@@ -2004,9 +2004,8 @@ class PretrainAgent(nn.Module):
         self.agent_1 = Agent_1
         self.sender_entropy_coeff = sender_entropy_coeff
         self.receiver_entropy_coeff = receiver_entropy_coeff
-        self.pretrained_messages=pretrained_messages
+        self.pretrained_messages=pretrained_messages.to(device)
         self.loss = loss
-        self.loss_weights = loss_weights
         self.n_features=n_features
         self.length_cost = length_cost
         self.unigram_penalty = unigram_penalty
@@ -2035,11 +2034,11 @@ class PretrainAgent(nn.Module):
         loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_1,self.pretrained_messages, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
-        effective_entropy_s_1 = torch.zeros_like(entropy_r_12)
+        effective_entropy_s_1 = torch.zeros_like(entropy_r_11)
 
         # the log prob of the choices made by S before and including the eos symbol - again, we don't
         # care about the rest
-        effective_log_prob_s_1 = torch.zeros_like(log_prob_r_12)
+        effective_log_prob_s_1 = torch.zeros_like(log_prob_r_11)
 
 
         for i in range(message_1.size(1)):
@@ -2076,7 +2075,7 @@ class PretrainAgent(nn.Module):
         rest_11['original_loss'] = loss_11_comm.mean().item()
         rest_11['mean_length'] = message_lengths_1.float().mean().item()
 
-        return optimized_loss_11,loss_11_imitation, rest
+        return optimized_loss_11,loss_11_imitation, rest_11
 
     def update_baseline(self, name, value):
         self.n_points[name] += 1

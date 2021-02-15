@@ -1573,7 +1573,7 @@ class TrainerPretraining:
             for batch in self.validation_data:
                 batch = move_to(batch, self.device)
                 optimized_loss_11,loss_11_imitation, rest = self.game(*batch)
-                mean_loss += 0.25*(optimized_loss_11 + optimized_loss_12 + optimized_loss_21 + optimized_loss_22)
+                mean_loss += optimized_loss_11+loss_11_imitation
                 mean_rest = _add_dicts(mean_rest, rest)
                 n_batches += 1
         mean_loss /= n_batches

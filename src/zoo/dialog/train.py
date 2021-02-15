@@ -1250,6 +1250,8 @@ def main(params):
             np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
             np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages_2)
             np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec_2)
+            np.save(opts.dir_save+'/accuracy/agent_1_2_accuracy_{}.npy'.format(epoch), acc_vec_12)
+            np.save(opts.dir_save+'/accuracy/agent_2_1_accuracy_{}.npy'.format(epoch), acc_vec_21)
 
         else:
 

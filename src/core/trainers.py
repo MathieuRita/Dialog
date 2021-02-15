@@ -1209,29 +1209,32 @@ class TrainerDialogModel4:
             batch = move_to(batch, self.device)
             mean_rest = _add_dicts(mean_rest, rest)
 
-            optimized_loss_sender_1=optimized_loss_11+optimized_loss_12+loss_12_imitation
-            optimized_loss_sender_2=optimized_loss_21+optimized_loss_22+loss_21_imitation
+            alpha=2*rest["acc_21"]
+            beta=2*rest["acc_12"]
+
+            optimized_loss_sender_1=optimized_loss_11+optimized_loss_12+alpha*loss_21_imitation
+            optimized_loss_sender_2=optimized_loss_21+optimized_loss_22+beta*loss_12_imitation
 
             if np.random.rand()>0.5:
               self.optimizer_sender_1.zero_grad()
               self.optimizer_receiver_1.zero_grad()
               self.optimizer_receiver_2.zero_grad()
-              self.optimizer_sender_2.zero_grad()
+              #self.optimizer_sender_2.zero_grad()
               optimized_loss_sender_1.backward()
               self.optimizer_sender_1.step()
               self.optimizer_receiver_1.step()
               self.optimizer_receiver_2.step()
-              self.optimizer_sender_2.step()
+              #self.optimizer_sender_2.step()
             else:
               self.optimizer_sender_2.zero_grad()
               self.optimizer_receiver_1.zero_grad()
               self.optimizer_receiver_2.zero_grad()
-              self.optimizer_sender_1.zero_grad()
+              #self.optimizer_sender_1.zero_grad()
               optimized_loss_sender_2.backward()
               self.optimizer_sender_2.step()
               self.optimizer_receiver_1.step()
               self.optimizer_receiver_2.step()
-              self.optimizer_sender_1.step()
+              #self.optimizer_sender_1.step()
 
 
             n_batches += 1

@@ -321,7 +321,7 @@ def dump(game, n_features, device, gs_mode, epoch):
 
     return acc_vec, messages
 
-def dump_dialog(game, n_features, device, gs_mode, epoch):
+def dump_dialog(game, n_features, device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
     # tiny "dataset"
     dataset = [[torch.eye(n_features).to(device), None]]
 
@@ -381,6 +381,11 @@ def dump_dialog(game, n_features, device, gs_mode, epoch):
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
 
     print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],messages_2[i]) for i in range(len(messages_1))])),flush=True)
+
+    if past_messages_1 is not None:
+        print("Similarity evo language 1 = {}".format(np.mean([levenshtein(messages_1[i],past_messages_1[i]) for i in range(len(messages_1))])),flush=True)
+    if past_messages_2 is not None:
+        print("Similarity evo language 2 = {}".format(np.mean([levenshtein(messages_2[i],past_messages_2[i]) for i in range(len(messages_2))])),flush=True)
 
 
     return acc_vec_1, messages_1, acc_vec_2, messages_2
@@ -1104,7 +1109,7 @@ def main(params):
 
         else:
             if opts.model=="baseline":
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=past_messages_2)
             elif opts.model=="model_1":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
             elif opts.model=="model_2":

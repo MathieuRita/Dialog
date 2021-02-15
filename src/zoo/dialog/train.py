@@ -1109,6 +1109,8 @@ def main(params):
 
         else:
             if opts.model=="baseline":
+                if epoch==0:
+                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=past_messages_2)
             elif opts.model=="model_1":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)

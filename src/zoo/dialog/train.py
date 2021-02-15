@@ -989,7 +989,7 @@ def main(params):
 
                 pretrained_messages=None
 
-                game = PretrainAgent(Agent_1=agent_2,
+                game = PretrainAgent(Agent_1=agent_1,
                                    loss=loss_pretraining,
                                    pretrained_messages=pretrained_messages,
                                    sender_entropy_coeff_1=opts.sender_entropy_coeff,
@@ -1026,11 +1026,11 @@ def main(params):
                                    reg=False,
                                    device=device)
 
-                optimizer_sender_1 = core.build_optimizer(list(game.agent_2.sender.parameters()))
-                optimizer_receiver_1 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+                optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
+                optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
 
-                trainer = TrainerPretraining(game=game, optimizer_sender_1=optimizer_sender_2,
-                                              optimizer_receiver_1=optimizer_receiver_2, train_data=train_loader, \
+                trainer = TrainerPretraining(game=game, optimizer_sender_1=optimizer_sender_1,
+                                              optimizer_receiver_1=optimizer_receiver_1, train_data=train_loader, \
                                               validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
                 trainer.train(n_epochs=20)

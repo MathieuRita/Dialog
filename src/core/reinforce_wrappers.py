@@ -2024,7 +2024,9 @@ class PretrainAgent(nn.Module):
         self.agent_1 = Agent_1
         self.sender_entropy_coeff_1 = sender_entropy_coeff_1
         self.receiver_entropy_coeff_1 = receiver_entropy_coeff_1
-        self.pretrained_messages=pretrained_messages.to(device)
+        self.pretrained_messages=pretrained_messages
+        if self.pretrained_messages is not None:
+            self.pretrained_messages=self.pretrained_messages.to(device)
         self.loss = loss
         self.n_features=n_features
         self.length_cost = length_cost

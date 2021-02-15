@@ -502,8 +502,8 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch,past_messages_1
     unif_acc /= n_features
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
 
-    messages_1=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_1]
-    messages_2=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_2]
+    #messages_1=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_1]
+    #messages_2=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_2]
 
 
     print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],messages_2[i]) for i in range(len(messages_1))])),flush=True)
@@ -514,7 +514,7 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch,past_messages_1
         print("Similarity evo language 2 = {}".format(np.mean([levenshtein(messages_2[i],past_messages_2[i]) for i in range(len(messages_2))])),flush=True)
 
 
-    return acc_vec_1, messages_1, acc_vec_2, messages_2
+    return messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22
 
 def dump_dialog_model_2(game, n_features, device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
     # tiny "dataset"
@@ -1132,11 +1132,11 @@ def main(params):
             if opts.model=="baseline":
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_1":
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_2":
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
@@ -1148,11 +1148,11 @@ def main(params):
             elif opts.model=="model_4":
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_5":
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="pretraining":
                 acc_vec_1, messages_1 = dump_pretraining(trainer.game, opts.n_features,pretrained_messages, device, False,epoch)
 
@@ -1160,8 +1160,8 @@ def main(params):
         if opts.dialog and opts.model!="pretraining":
 
             if opts.entropy_scheduling:
-                game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_1)**10)
-                game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_2)**10)
+                game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_11)**10)
+                game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_22)**10)
 
             # Convert to numpy to save messages
             all_messages_1=[]

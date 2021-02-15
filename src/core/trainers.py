@@ -1216,18 +1216,22 @@ class TrainerDialogModel4:
               self.optimizer_sender_1.zero_grad()
               self.optimizer_receiver_1.zero_grad()
               self.optimizer_receiver_2.zero_grad()
+              self.optimizer_sender_2.zero_grad()
               optimized_loss_sender_1.backward()
               self.optimizer_sender_1.step()
               self.optimizer_receiver_1.step()
               self.optimizer_receiver_2.step()
+              self.optimizer_sender_2.step()
             else:
               self.optimizer_sender_2.zero_grad()
               self.optimizer_receiver_1.zero_grad()
               self.optimizer_receiver_2.zero_grad()
+              self.optimizer_sender_1.zero_grad()
               optimized_loss_sender_2.backward()
               self.optimizer_sender_2.step()
               self.optimizer_receiver_1.step()
               self.optimizer_receiver_2.step()
+              self.optimizer_sender_1.step()
 
 
             n_batches += 1

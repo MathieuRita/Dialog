@@ -380,6 +380,13 @@ def dump_dialog(game, n_features, device, gs_mode, epoch):
 
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
 
+    messages_1=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_1]
+    messages_2=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_2]
+
+
+    print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],messages_2[i]) for i in range(len(messages_1))])),flush=True)
+
+
     return acc_vec_1, messages_1, acc_vec_2, messages_2
 
 def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
@@ -491,6 +498,10 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
     unif_acc /= n_features
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
 
+    messages_1=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_1]
+    messages_2=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_2]
+
+
     print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],messages_2[i]) for i in range(len(messages_1))])),flush=True)
 
     return acc_vec_1, messages_1, acc_vec_2, messages_2
@@ -588,6 +599,8 @@ def dump_pretraining(game, n_features,pretrained_messages, device, gs_mode, epoc
     unif_acc /= n_features
 
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    pretrained_messages=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in pretrained_messages]
 
     print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],pretrained_messages[i]) for i in range(len(messages_1))])),flush=True)
 

@@ -1992,6 +1992,10 @@ class DialogReinforceModel4(nn.Module):
                             self.loss_weights[1][0]*rest_21['mean_length'] + self.loss_weights[1][1]*rest_22['mean_length']
         rest['acc']=self.loss_weights[0][0]*rest_11['acc'] + self.loss_weights[0][1]*rest_12['acc']+ \
                          self.loss_weights[1][0]*rest_21['acc'] + self.loss_weights[1][1]*rest_22['acc']
+        rest["acc_11"]=rest_11["acc"]
+        rest["acc_12"]=rest_12["acc"]
+        rest["acc_21"]=rest_21["acc"]
+        rest["acc_22"]=rest_22["acc"]
 
         return optimized_loss_11,loss_11_imitation, optimized_loss_12,loss_12_imitation, optimized_loss_21,loss_21_imitation, optimized_loss_22,loss_22_imitation, rest
 

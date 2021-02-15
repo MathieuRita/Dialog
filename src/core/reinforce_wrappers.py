@@ -964,8 +964,10 @@ class DialogReinforceBaseline(nn.Module):
                  Agent_1,
                  Agent_2,
                  loss,
-                 sender_entropy_coeff,
-                 receiver_entropy_coeff,
+                 sender_entropy_coeff_1,
+                 receiver_entropy_coeff_1,
+                 sender_entropy_coeff_2,
+                 receiver_entropy_coeff_2,
                  device,
                  loss_weights=[0.5,0.5],
                  length_cost=0.0,
@@ -977,8 +979,10 @@ class DialogReinforceBaseline(nn.Module):
         super(DialogReinforceBaseline, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
-        self.sender_entropy_coeff = sender_entropy_coeff
-        self.receiver_entropy_coeff = receiver_entropy_coeff
+        self.sender_entropy_coeff_1 = sender_entropy_coeff_1
+        self.receiver_entropy_coeff_1 = receiver_entropy_coeff_1
+        self.sender_entropy_coeff_2 = sender_entropy_coeff_2
+        self.receiver_entropy_coeff_2 = receiver_entropy_coeff_2
         self.loss = loss
         self.loss_weights = loss_weights
         self.length_cost = length_cost
@@ -1014,8 +1018,8 @@ class DialogReinforceBaseline(nn.Module):
             effective_log_prob_s_1 += log_prob_s_1[:, i] * not_eosed_1
         effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
 
-        weighted_entropy_1 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
-                entropy_r_1.mean() * self.receiver_entropy_coeff
+        weighted_entropy_1 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
+                entropy_r_1.mean() * self.receiver_entropy_coeff_1
 
         log_prob_1 = effective_log_prob_s_1 + log_prob_r_1
 
@@ -1064,8 +1068,8 @@ class DialogReinforceBaseline(nn.Module):
             effective_log_prob_s_2 += log_prob_s_2[:, i] * not_eosed_2
         effective_entropy_s_2 = effective_entropy_s_2 / message_lengths_2.float()
 
-        weighted_entropy_2 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
-                entropy_r_2.mean() * self.receiver_entropy_coeff
+        weighted_entropy_2 = effective_entropy_s_2.mean() * self.sender_entropy_coeff_2 + \
+                entropy_r_2.mean() * self.receiver_entropy_coeff_2
 
         log_prob_2 = effective_log_prob_s_2 + log_prob_r_2
 
@@ -1119,8 +1123,10 @@ class DialogReinforceModel1(nn.Module):
                  Agent_1,
                  Agent_2,
                  loss,
-                 sender_entropy_coeff,
-                 receiver_entropy_coeff,
+                 sender_entropy_coeff_1,
+                 receiver_entropy_coeff_1,
+                 sender_entropy_coeff_2,
+                 receiver_entropy_coeff_2,
                  device,
                  loss_weights=[[0.25,0.25],[0.25,0.25]],
                  length_cost=0.0,
@@ -1132,8 +1138,10 @@ class DialogReinforceModel1(nn.Module):
         super(DialogReinforceModel1, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
-        self.sender_entropy_coeff = sender_entropy_coeff
-        self.receiver_entropy_coeff = receiver_entropy_coeff
+        self.sender_entropy_coeff_1 = sender_entropy_coeff_1
+        self.receiver_entropy_coeff_1 = receiver_entropy_coeff_1
+        self.sender_entropy_coeff_2 = sender_entropy_coeff_2
+        self.receiver_entropy_coeff_2 = receiver_entropy_coeff_2
         self.loss = loss
         self.loss_weights = loss_weights
         self.length_cost = length_cost
@@ -1175,8 +1183,8 @@ class DialogReinforceModel1(nn.Module):
             effective_log_prob_s_1 += log_prob_s_1[:, i] * not_eosed_1
         effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
 
-        weighted_entropy_12 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
-                entropy_r_12.mean() * self.receiver_entropy_coeff
+        weighted_entropy_12 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
+                entropy_r_12.mean() * self.receiver_entropy_coeff_1
 
         log_prob_12 = effective_log_prob_s_1 + log_prob_r_12
 
@@ -1211,8 +1219,8 @@ class DialogReinforceModel1(nn.Module):
         loss_11, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11, labels)
 
 
-        weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
-                entropy_r_11.mean() * self.receiver_entropy_coeff
+        weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
+                entropy_r_11.mean() * self.receiver_entropy_coeff_1
 
         log_prob_11 = effective_log_prob_s_1 + log_prob_r_11
 
@@ -1264,8 +1272,8 @@ class DialogReinforceModel1(nn.Module):
             effective_log_prob_s_2 += log_prob_s_2[:, i] * not_eosed_2
         effective_entropy_s_2 = effective_entropy_s_2 / message_lengths_2.float()
 
-        weighted_entropy_21 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
-                entropy_r_21.mean() * self.receiver_entropy_coeff
+        weighted_entropy_21 = effective_entropy_s_2.mean() * self.sender_entropy_coeff_2 + \
+                entropy_r_21.mean() * self.receiver_entropy_coeff_2
 
         log_prob_21 = effective_log_prob_s_2 + log_prob_r_21
 
@@ -1302,8 +1310,8 @@ class DialogReinforceModel1(nn.Module):
         loss_22, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22, labels)
 
 
-        weighted_entropy_22 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
-                entropy_r_22.mean() * self.receiver_entropy_coeff
+        weighted_entropy_22 = effective_entropy_s_2.mean() * self.sender_entropy_coeff_2 + \
+                entropy_r_22.mean() * self.receiver_entropy_coeff_2
 
         log_prob_22 = effective_log_prob_s_2 + log_prob_r_22
 
@@ -1368,8 +1376,10 @@ class DialogReinforceModel2(nn.Module):
                  Agent_1,
                  Agent_2,
                  loss,
-                 sender_entropy_coeff,
-                 receiver_entropy_coeff,
+                 sender_entropy_coeff_1,
+                 receiver_entropy_coeff_1,
+                 sender_entropy_coeff_2,
+                 receiver_entropy_coeff_2,
                  device,
                  loss_weights=[0.5,0.5],
                  length_cost=0.0,
@@ -1381,8 +1391,10 @@ class DialogReinforceModel2(nn.Module):
         super(DialogReinforceModel2, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
-        self.sender_entropy_coeff = sender_entropy_coeff
-        self.receiver_entropy_coeff = receiver_entropy_coeff
+        self.sender_entropy_coeff_1 = sender_entropy_coeff_1
+        self.receiver_entropy_coeff_1 = receiver_entropy_coeff_1
+        self.sender_entropy_coeff_2 = sender_entropy_coeff_2
+        self.receiver_entropy_coeff_2 = receiver_entropy_coeff_2
         self.loss = loss
         self.loss_weights = loss_weights
         self.length_cost = length_cost
@@ -1422,8 +1434,8 @@ class DialogReinforceModel2(nn.Module):
             effective_log_prob_s_1 += log_prob_s_1[:, i] * not_eosed_1
         effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
 
-        weighted_entropy_1 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
-                entropy_r_1.mean() * self.receiver_entropy_coeff
+        weighted_entropy_1 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
+                entropy_r_1.mean() * self.receiver_entropy_coeff_1
 
         log_prob_1 = effective_log_prob_s_1 + log_prob_r_1
 
@@ -1481,8 +1493,8 @@ class DialogReinforceModel2(nn.Module):
             effective_log_prob_s_2 += log_prob_s_2[:, i] * not_eosed_2
         effective_entropy_s_2 = effective_entropy_s_2 / message_lengths_2.float()
 
-        weighted_entropy_2 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
-                entropy_r_2.mean() * self.receiver_entropy_coeff
+        weighted_entropy_2 = effective_entropy_s_2.mean() * self.sender_entropy_coeff_2 + \
+                entropy_r_2.mean() * self.receiver_entropy_coeff_2
 
         log_prob_2 = effective_log_prob_s_2 + log_prob_r_2
 
@@ -1539,8 +1551,10 @@ class DialogReinforceModel3(nn.Module):
                  Agent_1,
                  Agent_2,
                  loss,
-                 sender_entropy_coeff,
-                 receiver_entropy_coeff,
+                 sender_entropy_coeff_1,
+                 receiver_entropy_coeff_1,
+                 sender_entropy_coeff_2,
+                 receiver_entropy_coeff_2,
                  device,
                  loss_weights=[0.5,0.5],
                  length_cost=0.0,
@@ -1552,8 +1566,10 @@ class DialogReinforceModel3(nn.Module):
         super(DialogReinforceModel3, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
-        self.sender_entropy_coeff = sender_entropy_coeff
-        self.receiver_entropy_coeff = receiver_entropy_coeff
+        self.sender_entropy_coeff_1 = sender_entropy_coeff_1
+        self.receiver_entropy_coeff_1 = receiver_entropy_coeff_1
+        self.sender_entropy_coeff_2 = sender_entropy_coeff_2
+        self.receiver_entropy_coeff_2 = receiver_entropy_coeff_2
         self.loss = loss
         self.loss_weights = loss_weights
         self.length_cost = length_cost
@@ -1597,8 +1613,8 @@ class DialogReinforceModel3(nn.Module):
             effective_log_prob_s_1 += log_prob_s_1[:, i] * not_eosed_1
         effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
 
-        weighted_entropy_1 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
-                entropy_r_1.mean() * self.receiver_entropy_coeff
+        weighted_entropy_1 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
+                entropy_r_1.mean() * self.receiver_entropy_coeff_1
 
         log_prob_1 = effective_log_prob_s_1 + log_prob_r_1
 
@@ -1655,8 +1671,8 @@ class DialogReinforceModel3(nn.Module):
             effective_log_prob_s_2 += log_prob_s_2[:, i] * not_eosed_2
         effective_entropy_s_2 = effective_entropy_s_2 / message_lengths_2.float()
 
-        weighted_entropy_2 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
-                entropy_r_2.mean() * self.receiver_entropy_coeff
+        weighted_entropy_2 = effective_entropy_s_2.mean() * self.sender_entropy_coeff_2 + \
+                entropy_r_2.mean() * self.receiver_entropy_coeff_2
 
         log_prob_2 = effective_log_prob_s_2 + log_prob_r_2
 
@@ -1710,8 +1726,10 @@ class DialogReinforceModel4(nn.Module):
                  Agent_1,
                  Agent_2,
                  loss,
-                 sender_entropy_coeff,
-                 receiver_entropy_coeff,
+                 sender_entropy_coeff_1,
+                 receiver_entropy_coeff_1,
+                 sender_entropy_coeff_2,
+                 receiver_entropy_coeff_2,
                  device,
                  loss_weights=[[0.25,0.25],[0.25,0.25]],
                  length_cost=0.0,
@@ -1723,8 +1741,10 @@ class DialogReinforceModel4(nn.Module):
         super(DialogReinforceModel4, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
-        self.sender_entropy_coeff = sender_entropy_coeff
-        self.receiver_entropy_coeff = receiver_entropy_coeff
+        self.sender_entropy_coeff_1 = sender_entropy_coeff_1
+        self.receiver_entropy_coeff_1 = receiver_entropy_coeff_1
+        self.sender_entropy_coeff_2 = sender_entropy_coeff_2
+        self.receiver_entropy_coeff_2 = receiver_entropy_coeff_2
         self.loss = loss
         self.loss_weights = loss_weights
         self.length_cost = length_cost
@@ -1774,8 +1794,8 @@ class DialogReinforceModel4(nn.Module):
             effective_log_prob_s_1 += log_prob_s_1[:, i] * not_eosed_1
         effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
 
-        weighted_entropy_12 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
-                entropy_r_12.mean() * self.receiver_entropy_coeff
+        weighted_entropy_12 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
+                entropy_r_12.mean() * self.receiver_entropy_coeff_1
 
         log_prob_12 = effective_log_prob_s_1 + log_prob_r_12
 
@@ -1817,8 +1837,8 @@ class DialogReinforceModel4(nn.Module):
         loss_11_imitation = loss_11_imitation #* prob_r_11.max(1).values
         loss_11_imitation=loss_11_imitation.mean()
 
-        weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
-                entropy_r_11.mean() * self.receiver_entropy_coeff
+        weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
+                entropy_r_11.mean() * self.receiver_entropy_coeff_1
 
         log_prob_11 = effective_log_prob_s_1 + log_prob_r_11
 
@@ -1878,8 +1898,8 @@ class DialogReinforceModel4(nn.Module):
             effective_log_prob_s_2 += log_prob_s_2[:, i] * not_eosed_2
         effective_entropy_s_2 = effective_entropy_s_2 / message_lengths_2.float()
 
-        weighted_entropy_21 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
-                entropy_r_21.mean() * self.receiver_entropy_coeff
+        weighted_entropy_21 = effective_entropy_s_2.mean() * self.sender_entropy_coeff_2 + \
+                entropy_r_21.mean() * self.receiver_entropy_coeff_2
 
         log_prob_21 = effective_log_prob_s_2 + log_prob_r_21
 
@@ -1924,8 +1944,8 @@ class DialogReinforceModel4(nn.Module):
         loss_22_imitation=loss_22_imitation.mean()
 
 
-        weighted_entropy_22 = effective_entropy_s_2.mean() * self.sender_entropy_coeff + \
-                entropy_r_22.mean() * self.receiver_entropy_coeff
+        weighted_entropy_22 = effective_entropy_s_2.mean() * self.sender_entropy_coeff_2 + \
+                entropy_r_22.mean() * self.receiver_entropy_coeff_2
 
         log_prob_22 = effective_log_prob_s_2 + log_prob_r_22
 
@@ -1990,8 +2010,8 @@ class PretrainAgent(nn.Module):
                  Agent_1,
                  loss,
                  pretrained_messages,
-                 sender_entropy_coeff,
-                 receiver_entropy_coeff,
+                 sender_entropy_coeff_1,
+                 receiver_entropy_coeff_1,
                  device,
                  n_features,
                  length_cost=0.0,
@@ -2002,8 +2022,8 @@ class PretrainAgent(nn.Module):
         """
         super(PretrainAgent, self).__init__()
         self.agent_1 = Agent_1
-        self.sender_entropy_coeff = sender_entropy_coeff
-        self.receiver_entropy_coeff = receiver_entropy_coeff
+        self.sender_entropy_coeff_1 = sender_entropy_coeff_1
+        self.receiver_entropy_coeff_1 = receiver_entropy_coeff_1
         self.pretrained_messages=pretrained_messages.to(device)
         self.loss = loss
         self.n_features=n_features
@@ -2048,8 +2068,8 @@ class PretrainAgent(nn.Module):
         effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
 
 
-        weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
-                entropy_r_11.mean() * self.receiver_entropy_coeff
+        weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
+                entropy_r_11.mean() * self.receiver_entropy_coeff_1
 
         log_prob_11 = effective_log_prob_s_1 + log_prob_r_11
 

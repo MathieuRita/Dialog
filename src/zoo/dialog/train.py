@@ -93,6 +93,9 @@ def get_params(params):
                         help='if dialog game')
     parser.add_argument('--model', type=str, default="baseline",
                         help='dialog agents model')
+    # If entropy scheduling
+    parser.add_argument('--entropy_scheduling', type=str, default=False,
+                        help='Schedule entropy coefficient')
 
     args = core.init(parser, params)
 
@@ -755,8 +758,10 @@ def main(params):
             game = DialogReinforceBaseline(Agent_1=agent_1,
                                            Agent_2=agent_2,
                                            loss=loss,
-                                           sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
                                            loss_weights=[0.5,0.5],
                                            length_cost=0.0,
                                            unigram_penalty=0.0,
@@ -805,8 +810,10 @@ def main(params):
             game = DialogReinforceModel1(Agent_1=agent_1,
                                            Agent_2=agent_2,
                                            loss=loss,
-                                           sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
                                            length_cost=0.0,
                                            unigram_penalty=0.0,
                                            reg=False,
@@ -858,8 +865,10 @@ def main(params):
             game = DialogReinforceModel2(Agent_1=agent_1,
                                            Agent_2=agent_2,
                                            loss=loss_model_2,
-                                           sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
                                            length_cost=0.0,
                                            unigram_penalty=0.0,
                                            reg=False,
@@ -909,8 +918,10 @@ def main(params):
             game = DialogReinforceModel3(Agent_1=agent_1,
                                            Agent_2=agent_2,
                                            loss=loss_model_3,
-                                           sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
                                            length_cost=0.0,
                                            unigram_penalty=0.0,
                                            reg=False,
@@ -961,8 +972,10 @@ def main(params):
             game = DialogReinforceModel4(Agent_1=agent_1,
                                            Agent_2=agent_2,
                                            loss=loss_model_3,
-                                           sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
                                            length_cost=0.0,
                                            unigram_penalty=0.0,
                                            reg=False,
@@ -1023,8 +1036,10 @@ def main(params):
             game = DialogReinforceModel4(Agent_1=agent_1,
                                            Agent_2=agent_2,
                                            loss=loss_model_3,
-                                           sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
                                            length_cost=0.0,
                                            unigram_penalty=0.0,
                                            reg=False,
@@ -1074,8 +1089,8 @@ def main(params):
             game = PretrainAgent(Agent_1=agent_1,
                                loss=loss_pretraining,
                                pretrained_messages=pretrained_messages,
-                               sender_entropy_coeff=opts.sender_entropy_coeff,
-                               receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                               sender_entropy_coeff_1=opts.sender_entropy_coeff_1,
+                               receiver_entropy_coeff_1=opts.receiver_entropy_coeff_1,
                                n_features=opts.n_features,
                                length_cost=0.0,
                                unigram_penalty=0.0,
@@ -1111,7 +1126,7 @@ def main(params):
             if opts.model=="baseline":
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=past_messages_2)
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_1":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
             elif opts.model=="model_2":
@@ -1127,6 +1142,11 @@ def main(params):
 
 
         if opts.dialog and opts.model!="pretraining":
+
+            if opts.entropy_scheduling:
+                game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_1))
+                game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_2))
+
             # Convert to numpy to save messages
             all_messages_1=[]
             for x in messages_1:
@@ -1152,6 +1172,10 @@ def main(params):
             np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec_2)
 
         else:
+
+            if opts.entropy_scheduling:
+                game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_1))
+
             # Convert to numpy to save messages
             all_messages_1=[]
             for x in messages_1:

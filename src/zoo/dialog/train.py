@@ -556,7 +556,7 @@ def dump_dialog_model_2(game, n_features, device, gs_mode, epoch):
 
     return acc_vec_1, messages_1, acc_vec_2, messages_2
 
-def dump_pretraining(game, n_features, device, gs_mode, epoch):
+def dump_pretraining(game, n_features,pretrained_messages, device, gs_mode, epoch):
     # tiny "dataset"
     dataset = [[torch.eye(n_features).to(device), None]]
 
@@ -588,6 +588,9 @@ def dump_pretraining(game, n_features, device, gs_mode, epoch):
     unif_acc /= n_features
 
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],pretrained_messages[i]) for i in range(len(messages_1))])),flush=True)
+
 
     return acc_vec_1, messages_1
 
@@ -1104,7 +1107,7 @@ def main(params):
             elif opts.model=="model_5":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
             elif opts.model=="pretraining":
-                acc_vec_1, messages_1 = dump_pretraining(trainer.game, opts.n_features, device, False,epoch)
+                acc_vec_1, messages_1 = dump_pretraining(trainer.game, opts.n_features,pretrained_messages, device, False,epoch)
 
 
         if opts.dialog and opts.model!="pretraining":

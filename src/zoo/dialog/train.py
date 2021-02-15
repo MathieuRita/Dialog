@@ -284,11 +284,8 @@ def loss_pretraining(sender_input, message, pretrained_messages, receiver_input,
     acc_imitation = (prob_reconstruction.argmax(dim=1) == pretrained_messages).detach().float()
     loss_imitation = F.cross_entropy(torch.log(prob_reconstruction), pretrained_messages, reduction="none")
 
-    loss_imitation = loss_imitation.reshape((loss.size(0),loss_imitation.size(0)//loss.size(0)))
-    acc_imitation = acc_imitation.reshape((acc.size(0),acc_imitation.size(0)//acc.size(0)))
-
-    loss_imitation = loss_imitation.mean(dim=1) # Add EOS mask
-    acc_imitation = acc_imitation.mean(dim=1)
+    loss_imitation = loss_imitation.mean(dim=0) # Add EOS mask
+    acc_imitation = acc_imitation.mean(dim=0)
 
     return loss,loss_imitation, {'acc': acc}
 
@@ -1046,13 +1043,23 @@ def main(params):
             agent_1=AgentModel3(receiver = receiver_1, sender = sender_1)
 
             "Pretrained_message"
-            pretrained_messsages=[[i,0] for i in range(opts.n_features)]
+            [[i]+[0]*(opts.max_len-1) for i in range(opts.n_features)]
+            pretrained_messages=[]
+            for i in range(opts.voc_size):
+                pretrained_messages.append([i]+[0]*(opts.max_len-1))
+            for i in range(opts.voc_size):
+                pretrained_messages.append([1]+[i]+[0]*(opts.max_len-2))
+            for i in range(opts.n_features-2*opts.voc_size):
+                pretrained_messages.append([2]+[i]+[0]*(opts.max_len-2))
+
+            pretrained_messages=torch.tensor(pretrained_messages)
 
             game = PretrainAgent(Agent_1=agent_1,
                                loss=loss_pretraining,
                                pretrained_messages=pretrained_messages,
                                sender_entropy_coeff=opts.sender_entropy_coeff,
                                receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                               n_features=opts.n_features,
                                length_cost=0.0,
                                unigram_penalty=0.0,
                                reg=False,

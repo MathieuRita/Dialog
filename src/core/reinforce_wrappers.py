@@ -1993,7 +1993,7 @@ class PretrainAgent(nn.Module):
                  sender_entropy_coeff,
                  receiver_entropy_coeff,
                  device,
-                 loss_weights=[[0.25,0.25],[0.25,0.25]],
+                 n_features,
                  length_cost=0.0,
                  unigram_penalty=0.0,
                  reg=False):
@@ -2004,9 +2004,10 @@ class PretrainAgent(nn.Module):
         self.agent_1 = Agent_1
         self.sender_entropy_coeff = sender_entropy_coeff
         self.receiver_entropy_coeff = receiver_entropy_coeff
-        self.pretrained_messages=pretrained_messages,
+        self.pretrained_messages=pretrained_messages
         self.loss = loss
         self.loss_weights = loss_weights
+        self.n_features=n_features
         self.length_cost = length_cost
         self.unigram_penalty = unigram_penalty
         self.device=device
@@ -2027,15 +2028,26 @@ class PretrainAgent(nn.Module):
 
         receiver_output_11, prob_r_11, _ , log_prob_r_11, entropy_r_11 = self.agent_1.receive(message_1, receiver_input, message_lengths_1,imitate=True)
 
-        pretrained_sender_input = move_to(torch.eye(n_features), device)
+        pretrained_sender_input = torch.eye(self.n_features).to(self.device)
 
         message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(pretrained_sender_input,imitate=True)
 
-        loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_1,pretrained_messages, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
+        loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_1,self.pretrained_messages, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
 
-        # Imitation loss weighted by likelihood of candidate
-        loss_11_imitation = loss_11_imitation #* prob_r_11.max(1).values
-        loss_11_imitation=loss_11_imitation.mean()
+        # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
+        effective_entropy_s_1 = torch.zeros_like(entropy_r_12)
+
+        # the log prob of the choices made by S before and including the eos symbol - again, we don't
+        # care about the rest
+        effective_log_prob_s_1 = torch.zeros_like(log_prob_r_12)
+
+
+        for i in range(message_1.size(1)):
+            not_eosed_1 = (i < message_lengths_1).float()
+            effective_entropy_s_1 += entropy_s_1[:, i] * not_eosed_1
+            effective_log_prob_s_1 += log_prob_s_1[:, i] * not_eosed_1
+        effective_entropy_s_1 = effective_entropy_s_1 / message_lengths_1.float()
+
 
         weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
                 entropy_r_11.mean() * self.receiver_entropy_coeff

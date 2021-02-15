@@ -491,6 +491,26 @@ def find_lengths(messages: torch.Tensor) -> torch.Tensor:
 
     return lengths
 
+def levenshtein(s1, s2):
+    """Compute the Levenshtein Edit distance between two strings.
+
+    Parameters
+    ----------
+    s1 : str
+    s2 : str
+    """
+    #s1 = s1.lower()
+    #s2 = s2.lower()
+    m = np.zeros((len(s1)+1, len(s2)+1))
+    m[:, 0] = np.arange(len(s1)+1)
+    m[0, :] = np.arange(len(s2)+1)
+    for i in range(1, len(s1)+1):
+        for j in range(1, len(s2)+1):
+            if s1[i-1] == s2[j-1]:
+                m[i, j] = min(m[i-1, j]+1, m[i, j-1]+1, m[i-1, j-1])
+            else:
+                m[i, j] = min(m[i-1, j]+1, m[i, j-1]+1, m[i-1, j-1]+1)
+    return m[len(s1), len(s2)]
 
 def dump_test_position(game: torch.nn.Module,
                               dataset: 'torch.utils.data.DataLoader',

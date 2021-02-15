@@ -83,7 +83,7 @@ class RnnEncoderExternalEmbedding(nn.Module):
             cell {str} -- Type of the cell ('rnn', 'gru', or 'lstm') (default: {'rnn'})
             num_layers {int} -- Number of the stacked RNN layers (default: {1})
         """
-        super(RnnEncoder, self).__init__()
+        super(RnnEncoderExternalEmbedding, self).__init__()
 
         cell = cell.lower()
         cell_types = {'rnn': nn.RNN, 'gru': nn.GRU, 'lstm': nn.LSTM}

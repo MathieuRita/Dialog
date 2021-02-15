@@ -14,10 +14,10 @@ from src.zoo.dialog.features import OneHotLoader, UniformLoader
 from src.zoo.dialog.archs import Sender, Receiver
 from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
-from src.core.util import dump_sender_receiver_impatient
+from src.core.util import dump_sender_receiver_impatient,levenshtein
 #Dialog
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
-from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3
+from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedEmbedding
 from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4
 from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2
 from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4
@@ -393,7 +393,7 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%50==0:
+        if epoch%20==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
@@ -418,7 +418,7 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%50==0:
+        if epoch%20==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
@@ -444,7 +444,7 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%50==0:
+        if epoch%20==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
@@ -468,11 +468,13 @@ def dump_dialog_model_1(game, n_features, device, gs_mode, epoch):
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%50==0:
+        if epoch%20==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],messages_2[i]) for i in range(len(messages_1))])),flush=True)
 
     return acc_vec_1, messages_1, acc_vec_2, messages_2
 
@@ -906,67 +908,67 @@ def main(params):
                                           optimizer_receiver_1=optimizer_receiver_1, optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
-            elif opts.model=="model_5":
+        elif opts.model=="model_5":
 
-                "Agent 1"
+            "Agent 1"
 
-                sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
 
-                receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
 
 
-                agent_1=AgentSharedEmbedding(receiver=receiver_1,
-                                            sender=sender_1,
-                                            vocab_size=opts.vocab_size,
-                                            max_len=opts.max_len,
-                                            sender_embedding=opts.sender_embedding,
-                                            sender_hidden=opts.sender_hidden,
-                                            sender_cell=opts.sender_cell,
-                                            sender_num_layers=opts.sender_num_layers,
-                                            force_eos=force_eos,
-                                            receiver_embedding=opts.receiver_embedding,
-                                            receiver_hidden=opts.receiver_hidden,
-                                            receiver_cell=opts.receiver_cell,
-                                            receiver_num_layers=opts.receiver_num_layers)
+            agent_1=AgentSharedEmbedding(receiver=receiver_1,
+                                        sender=sender_1,
+                                        vocab_size=opts.vocab_size,
+                                        max_len=opts.max_len,
+                                        sender_embedding=opts.sender_embedding,
+                                        sender_hidden=opts.sender_hidden,
+                                        sender_cell=opts.sender_cell,
+                                        sender_num_layers=opts.sender_num_layers,
+                                        force_eos=force_eos,
+                                        receiver_embedding=opts.receiver_embedding,
+                                        receiver_hidden=opts.receiver_hidden,
+                                        receiver_cell=opts.receiver_cell,
+                                        receiver_num_layers=opts.receiver_num_layers)
 
-                "Agent 2"
+            "Agent 2"
 
-                sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+            sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
 
-                receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+            receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
 
-                agent_2=AgentSharedEmbedding(receiver=receiver_2,
-                                            sender=sender_2,
-                                            vocab_size=opts.vocab_size,
-                                            max_len=opts.max_len,
-                                            sender_embedding=opts.sender_embedding,
-                                            sender_hidden=opts.sender_hidden,
-                                            sender_cell=opts.sender_cell,
-                                            sender_num_layers=opts.sender_num_layers,
-                                            force_eos=force_eos,
-                                            receiver_embedding=opts.receiver_embedding,
-                                            receiver_hidden=opts.receiver_hidden,
-                                            receiver_cell=opts.receiver_cell,
-                                            receiver_num_layers=opts.receiver_num_layers)
+            agent_2=AgentSharedEmbedding(receiver=receiver_2,
+                                        sender=sender_2,
+                                        vocab_size=opts.vocab_size,
+                                        max_len=opts.max_len,
+                                        sender_embedding=opts.sender_embedding,
+                                        sender_hidden=opts.sender_hidden,
+                                        sender_cell=opts.sender_cell,
+                                        sender_num_layers=opts.sender_num_layers,
+                                        force_eos=force_eos,
+                                        receiver_embedding=opts.receiver_embedding,
+                                        receiver_hidden=opts.receiver_hidden,
+                                        receiver_cell=opts.receiver_cell,
+                                        receiver_num_layers=opts.receiver_num_layers)
 
-                game = DialogReinforceModel4(Agent_1=agent_1,
-                                               Agent_2=agent_2,
-                                               loss=loss_model_3,
-                                               sender_entropy_coeff=opts.sender_entropy_coeff,
-                                               receiver_entropy_coeff=opts.receiver_entropy_coeff,
-                                               length_cost=0.0,
-                                               unigram_penalty=0.0,
-                                               reg=False,
-                                               device=device)
+            game = DialogReinforceModel4(Agent_1=agent_1,
+                                           Agent_2=agent_2,
+                                           loss=loss_model_3,
+                                           sender_entropy_coeff=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                           length_cost=0.0,
+                                           unigram_penalty=0.0,
+                                           reg=False,
+                                           device=device)
 
-                optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
-                optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
-                optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
-                optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+            optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
+            optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
+            optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
+            optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
 
-                trainer = TrainerDialogModel4(game=game, optimizer_sender_1=optimizer_sender_1, optimizer_sender_2=optimizer_sender_2, \
-                                              optimizer_receiver_1=optimizer_receiver_1, optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
-                                              validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+            trainer = TrainerDialogModel4(game=game, optimizer_sender_1=optimizer_sender_1, optimizer_sender_2=optimizer_sender_2, \
+                                          optimizer_receiver_1=optimizer_receiver_1, optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
+                                          validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
 
 

@@ -2047,9 +2047,13 @@ class PretrainAgent(nn.Module):
 
         receiver_output_11, prob_r_11, _ , log_prob_r_11, entropy_r_11 = self.agent_1.receive(message_1, receiver_input, message_lengths_1,imitate=True)
 
-        pretrained_sender_input = torch.eye(self.n_features).to(self.device)
+        if self.pretrained_messages is not None:
+            pretrained_sender_input = torch.eye(self.n_features).to(self.device)
 
-        message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(pretrained_sender_input,imitate=True)
+            message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(pretrained_sender_input,imitate=True)
+        else:
+            message_reconstruction_11=None
+            prob_reconstruction_11=None
 
         loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_1,self.pretrained_messages, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
 

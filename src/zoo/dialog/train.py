@@ -94,7 +94,11 @@ def get_params(params):
     parser.add_argument('--model', type=str, default="baseline",
                         help='dialog agents model')
     # If entropy scheduling
-    parser.add_argument('--entropy_scheduling', type=str, default=False,
+    parser.add_argument('--entropy_scheduling', type=bool, default=False,
+                        help='Schedule entropy coefficient')
+    parser.add_argument('--pretrain_agent_1', type=bool, default=False,
+                        help='Schedule entropy coefficient')
+    parser.add_argument('--pretrain_agent_2', type=bool, default=False,
                         help='Schedule entropy coefficient')
 
     args = core.init(parser, params)
@@ -279,16 +283,20 @@ def loss_pretraining(sender_input, message, pretrained_messages, receiver_input,
     acc = (receiver_output.argmax(dim=1) == sender_input.argmax(dim=1)).detach().float()
     loss = F.cross_entropy(receiver_output, sender_input.argmax(dim=1), reduction="none")
 
-    # Reconstruction task
-    prob_reconstruction = prob_reconstruction.transpose(1,2)
-    prob_reconstruction = prob_reconstruction.reshape((prob_reconstruction.size(0)*prob_reconstruction.size(1),prob_reconstruction.size(2)))
-    pretrained_messages = pretrained_messages.reshape((pretrained_messages.size(0)*pretrained_messages.size(1)))
+    if pretrained_messages is not None:
+        # Reconstruction task
+        prob_reconstruction = prob_reconstruction.transpose(1,2)
+        prob_reconstruction = prob_reconstruction.reshape((prob_reconstruction.size(0)*prob_reconstruction.size(1),prob_reconstruction.size(2)))
+        pretrained_messages = pretrained_messages.reshape((pretrained_messages.size(0)*pretrained_messages.size(1)))
 
-    acc_imitation = (prob_reconstruction.argmax(dim=1) == pretrained_messages).detach().float()
-    loss_imitation = F.cross_entropy(torch.log(prob_reconstruction), pretrained_messages, reduction="none")
+        acc_imitation = (prob_reconstruction.argmax(dim=1) == pretrained_messages).detach().float()
+        loss_imitation = F.cross_entropy(torch.log(prob_reconstruction), pretrained_messages, reduction="none")
 
-    loss_imitation = loss_imitation.mean(dim=0) # Add EOS mask
-    acc_imitation = acc_imitation.mean(dim=0)
+        loss_imitation = loss_imitation.mean(dim=0) # Add EOS mask
+        acc_imitation = acc_imitation.mean(dim=0)
+    else:
+        loss_imitation=0.
+        acc_imitation=0.
 
     return loss,loss_imitation, {'acc': acc}
 
@@ -975,6 +983,58 @@ def main(params):
 
             agent_2=AgentModel3(receiver = receiver_2, sender = sender_2)
 
+            if opts.pretrain_agent_1:
+
+                print("Pretrain Agent 1")
+
+                pretrained_messages=None
+
+                game = PretrainAgent(Agent_1=agent_2,
+                                   loss=loss_pretraining,
+                                   pretrained_messages=pretrained_messages,
+                                   sender_entropy_coeff_1=opts.sender_entropy_coeff_1,
+                                   receiver_entropy_coeff_1=opts.receiver_entropy_coeff_1,
+                                   n_features=opts.n_features,
+                                   length_cost=0.0,
+                                   unigram_penalty=0.0,
+                                   reg=False,
+                                   device=device)
+
+                optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
+                optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
+
+                trainer = TrainerPretraining(game=game, optimizer_sender_1=optimizer_sender_1,
+                                              optimizer_receiver_1=optimizer_receiver_1, train_data=train_loader, \
+                                              validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+                trainer.train(n_epochs=20)
+
+            if opts.pretrain_agent_2:
+
+                print("Pretrain Agent 2")
+
+                pretrained_messages=None
+
+                game = PretrainAgent(Agent_1=agent_2,
+                                   loss=loss_pretraining,
+                                   pretrained_messages=pretrained_messages,
+                                   sender_entropy_coeff_1=opts.sender_entropy_coeff_2,
+                                   receiver_entropy_coeff_1=opts.receiver_entropy_coeff_2,
+                                   n_features=opts.n_features,
+                                   length_cost=0.0,
+                                   unigram_penalty=0.0,
+                                   reg=False,
+                                   device=device)
+
+                optimizer_sender_1 = core.build_optimizer(list(game.agent_2.sender.parameters()))
+                optimizer_receiver_1 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+
+                trainer = TrainerPretraining(game=game, optimizer_sender_1=optimizer_sender_2,
+                                              optimizer_receiver_1=optimizer_receiver_2, train_data=train_loader, \
+                                              validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+                trainer.train(n_epochs=20)
+
             game = DialogReinforceModel4(Agent_1=agent_1,
                                            Agent_2=agent_2,
                                            loss=loss_model_3,
@@ -1160,8 +1220,12 @@ def main(params):
         if opts.dialog and opts.model!="pretraining":
 
             if opts.entropy_scheduling:
-                game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_11)**10)
-                game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_22)**10)
+                if opts.model!="baseline":
+                    game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_11)**10)
+                    game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_22)**10)
+                else:
+                    game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_1)**10)
+                    game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_2)**10)
 
             # Convert to numpy to save messages
             all_messages_1=[]

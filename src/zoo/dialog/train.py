@@ -1045,11 +1045,11 @@ def main(params):
             "Pretrained_message"
             [[i]+[0]*(opts.max_len-1) for i in range(opts.n_features)]
             pretrained_messages=[]
-            for i in range(opts.voc_size):
+            for i in range(opts.vocab_size):
                 pretrained_messages.append([i]+[0]*(opts.max_len-1))
-            for i in range(opts.voc_size):
+            for i in range(opts.vocab_size):
                 pretrained_messages.append([1]+[i]+[0]*(opts.max_len-2))
-            for i in range(opts.n_features-2*opts.voc_size):
+            for i in range(opts.n_features-2*opts.vocab_size):
                 pretrained_messages.append([2]+[i]+[0]*(opts.max_len-2))
 
             pretrained_messages=torch.tensor(pretrained_messages)

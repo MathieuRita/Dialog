@@ -906,6 +906,68 @@ def main(params):
                                           optimizer_receiver_1=optimizer_receiver_1, optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
+            elif opts.model=="model_5":
+
+                "Agent 1"
+
+                sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+
+                receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+
+
+                agent_1=AgentSharedEmbedding(receiver=receiver_1,
+                                            sender=sender_1,
+                                            vocab_size=opts.vocab_size,
+                                            max_len=opts.max_len,
+                                            sender_embedding=opts.sender_embedding,
+                                            sender_hidden=opts.sender_hidden,
+                                            sender_cell=opts.sender_cell,
+                                            sender_num_layers=opts.sender_num_layers,
+                                            force_eos=force_eos,
+                                            receiver_embedding=opts.receiver_embedding,
+                                            receiver_hidden=opts.receiver_hidden,
+                                            receiver_cell=opts.receiver_cell,
+                                            receiver_num_layers=opts.receiver_num_layers)
+
+                "Agent 2"
+
+                sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+
+                receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+
+                agent_2=AgentSharedEmbedding(receiver=receiver_2,
+                                            sender=sender_2,
+                                            vocab_size=opts.vocab_size,
+                                            max_len=opts.max_len,
+                                            sender_embedding=opts.sender_embedding,
+                                            sender_hidden=opts.sender_hidden,
+                                            sender_cell=opts.sender_cell,
+                                            sender_num_layers=opts.sender_num_layers,
+                                            force_eos=force_eos,
+                                            receiver_embedding=opts.receiver_embedding,
+                                            receiver_hidden=opts.receiver_hidden,
+                                            receiver_cell=opts.receiver_cell,
+                                            receiver_num_layers=opts.receiver_num_layers)
+
+                game = DialogReinforceModel4(Agent_1=agent_1,
+                                               Agent_2=agent_2,
+                                               loss=loss_model_3,
+                                               sender_entropy_coeff=opts.sender_entropy_coeff,
+                                               receiver_entropy_coeff=opts.receiver_entropy_coeff,
+                                               length_cost=0.0,
+                                               unigram_penalty=0.0,
+                                               reg=False,
+                                               device=device)
+
+                optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
+                optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
+                optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
+                optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+
+                trainer = TrainerDialogModel4(game=game, optimizer_sender_1=optimizer_sender_1, optimizer_sender_2=optimizer_sender_2, \
+                                              optimizer_receiver_1=optimizer_receiver_1, optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
+                                              validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
 
 
     for epoch in range(int(opts.n_epochs)):
@@ -933,6 +995,9 @@ def main(params):
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch)
             elif opts.model=="model_4":
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
+            elif opts.model=="model_5":
+                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch)
+
 
 
         # Convert to numpy to save messages

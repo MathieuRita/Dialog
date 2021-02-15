@@ -16,7 +16,7 @@ from .reinforce_wrappers import (ReinforceWrapper, SymbolGameReinforce,
                                  ReinforceDeterministicWrapper, RnnReceiverReinforce,
                                  RnnSenderReinforce, SenderReceiverRnnReinforce,
                                  RnnReceiverDeterministic, TransformerReceiverDeterministic,
-                                 TransformerSenderReinforce,RnnReceiverReinforceV2)
+                                 TransformerSenderReinforce)
 
 from .rnn import RnnEncoder
 

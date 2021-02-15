@@ -13,7 +13,7 @@ import numpy as np
 
 
 from .transformer import TransformerEncoder, TransformerDecoder
-from .rnn import RnnEncoder, RnnEncoderImpatient
+from .rnn import RnnEncoder, RnnEncoderImpatient,RnnEncoderExternalEmbedding
 from .util import find_lengths
 
 
@@ -377,6 +377,130 @@ class RnnSenderReinforceModel3(nn.Module):
 
         return sequence, logits, entropy
 
+class RnnSenderReinforceExternalEmbedding(nn.Module):
+    """
+    Reinforce Wrapper for Sender in variable-length message game. Assumes that during the forward,
+    the wrapped agent returns the initial hidden state for a RNN cell. This cell is the unrolled by the wrapper.
+    During training, the wrapper samples from the cell, getting the output message. Evaluation-time, the sampling
+    is replaced by argmax.
+
+    >>> agent = nn.Linear(10, 3)
+    >>> agent = RnnSenderReinforce(agent, vocab_size=5, embed_dim=5, hidden_size=3, max_len=10, cell='lstm', force_eos=False)
+    >>> input = torch.FloatTensor(16, 10).uniform_(-0.1, 0.1)
+    >>> message, logprob, entropy = agent(input)
+    >>> message.size()
+    torch.Size([16, 10])
+    >>> (entropy > 0).all().item()
+    1
+    >>> message.size()  # batch size x max_len
+    torch.Size([16, 10])
+    """
+    def __init__(self, agent,embedding_layer, vocab_size, embed_dim, hidden_size, max_len, num_layers=1, cell='rnn', force_eos=True):
+        """
+        :param agent: the agent to be wrapped
+        :param vocab_size: the communication vocabulary size
+        :param embed_dim: the size of the embedding used to embed the output symbols
+        :param hidden_size: the RNN cell's hidden state size
+        :param max_len: maximal length of the output messages
+        :param cell: type of the cell used (rnn, gru, lstm)
+        :param force_eos: if set to True, each message is extended by an EOS symbol. To ensure that no message goes
+        beyond `max_len`, Sender only generates `max_len - 1` symbols from an RNN cell and appends EOS.
+        """
+        super(RnnSenderReinforceExternalEmbedding, self).__init__()
+        self.agent = agent
+
+        self.force_eos = force_eos
+
+        self.max_len = max_len
+        if force_eos:
+            self.max_len -= 1
+
+        self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
+        self.norm_h = torch.nn.LayerNorm(hidden_size)
+        self.norm_c = torch.nn.LayerNorm(hidden_size)
+        self.embedding = embedding_layer
+        self.sos_embedding = nn.Parameter(torch.zeros(embed_dim))
+        self.embed_dim = embed_dim
+        self.vocab_size = vocab_size
+        self.num_layers = num_layers
+        self.cells = None
+
+        cell = cell.lower()
+        cell_types = {'rnn': nn.RNNCell, 'gru': nn.GRUCell, 'lstm': nn.LSTMCell}
+
+        if cell not in cell_types:
+            raise ValueError(f"Unknown RNN Cell: {cell}")
+
+        cell_type = cell_types[cell]
+        self.cells = nn.ModuleList([
+            cell_type(input_size=embed_dim, hidden_size=hidden_size) if i == 0 else \
+            cell_type(input_size=hidden_size, hidden_size=hidden_size) for i in range(self.num_layers)])
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.normal_(self.sos_embedding, 0.0, 0.01)
+
+    def forward(self, x, imitate=False):
+        prev_hidden = [self.agent(x)]
+        prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers - 1)])
+
+        prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers)]  # only used for LSTM
+
+        input = torch.stack([self.sos_embedding] * x.size(0))
+
+        sequence = []
+        logits = []
+        entropy = []
+
+        for step in range(self.max_len):
+            for i, layer in enumerate(self.cells):
+                if isinstance(layer, nn.LSTMCell):
+                    h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
+                    h_t = self.norm_h(h_t)
+                    c_t = self.norm_h(c_t)
+                    prev_c[i] = c_t
+                else:
+                    h_t = layer(input, prev_hidden[i])
+                    h_t = self.norm_h(h_t)
+                prev_hidden[i] = h_t
+                input = h_t
+
+
+            step_logits = F.log_softmax(self.hidden_to_output(h_t), dim=1)
+
+            distr = Categorical(logits=step_logits)
+            entropy.append(distr.entropy())
+
+            if self.training:
+                x = distr.sample()
+            else:
+                x = step_logits.argmax(dim=1)
+
+            if imitate:
+                logits.append(distr.probs)
+            else:
+                logits.append(distr.log_prob(x))
+
+            input = self.embedding(x)
+            sequence.append(x)
+
+        sequence = torch.stack(sequence).permute(1, 0)
+        if imitate:
+          logits = torch.stack(logits).permute(1,2, 0)
+        else:
+          logits = torch.stack(logits).permute(1, 0)
+        entropy = torch.stack(entropy).permute(1, 0)
+
+        if self.force_eos:
+            zeros = torch.zeros((sequence.size(0), 1)).to(sequence.device)
+
+            sequence = torch.cat([sequence, zeros.long()], dim=1)
+            logits = torch.cat([logits, zeros], dim=1)
+            entropy = torch.cat([entropy, zeros], dim=1)
+
+        return sequence, logits, entropy
+
 
 class RnnReceiverReinforce(nn.Module):
     """
@@ -458,6 +582,64 @@ class RnnReceiverDeterministic(nn.Module):
         super(RnnReceiverDeterministic, self).__init__()
         self.agent = agent
         self.encoder = RnnEncoder(vocab_size, embed_dim, hidden_size, cell, num_layers)
+        self.norm = nn.LayerNorm(hidden_size)
+
+    def forward(self, message, input=None, lengths=None,imitate=False):
+        encoded = self.encoder(message)
+        encoded=self.norm(encoded)
+        agent_output = self.agent(encoded, input)
+
+        if imitate:
+            step_logits = F.log_softmax(agent_output, dim=1)
+            distr = Categorical(logits=step_logits)
+            entropy=distr.entropy()
+            logits=distr.probs
+            entropy=entropy.to(agent_output.device)
+            logits=logits.to(agent_output.device)
+
+            det_logits=torch.zeros(agent_output.size(0)).to(agent_output.device)
+            det_entropy=det_logits
+
+            return agent_output, logits, entropy, det_logits, det_entropy
+
+        else:
+            logits = torch.zeros(agent_output.size(0)).to(agent_output.device)
+            entropy = logits
+
+            return agent_output, logits, entropy
+
+
+class RnnReceiverDeterministicExternalEmbedding(nn.Module):
+    """
+    Reinforce Wrapper for a deterministic Receiver in variable-length message game. The wrapper logic feeds the message
+    into the cell and calls the wrapped agent with the hidden state that either corresponds to the end-of-sequence
+    term or to the end of the sequence. The wrapper extends it with zero-valued log-prob and entropy tensors so that
+    the agent becomes compatible with the SenderReceiverRnnReinforce game.
+
+    As the wrapped agent does not sample, it has to be trained via regular back-propagation. This requires that both the
+    the agent's output and  loss function and the wrapped agent are differentiable.
+
+    >>> class Agent(nn.Module):
+    ...     def __init__(self):
+    ...         super().__init__()
+    ...         self.fc = nn.Linear(5, 3)
+    ...     def forward(self, rnn_output, _input = None):
+    ...         return self.fc(rnn_output)
+    >>> agent = RnnReceiverDeterministic(Agent(), vocab_size=10, embed_dim=10, hidden_size=5)
+    >>> message = torch.zeros((16, 10)).long().random_(0, 10)  # batch of 16, 10 symbol length
+    >>> output, logits, entropy = agent(message)
+    >>> (logits == 0).all().item()
+    1
+    >>> (entropy == 0).all().item()
+    1
+    >>> output.size()
+    torch.Size([16, 3])
+    """
+
+    def __init__(self, agent, embedding_layer, vocab_size, embed_dim, hidden_size, cell='rnn', num_layers=1):
+        super(RnnReceiverDeterministicExternalEmbedding, self).__init__()
+        self.agent = agent
+        self.encoder = RnnEncoderExternalEmbedding(embedding_layer, vocab_size, embed_dim, hidden_size, cell, num_layers)
         self.norm = nn.LayerNorm(hidden_size)
 
     def forward(self, message, input=None, lengths=None,imitate=False):
@@ -708,6 +890,57 @@ class AgentModel3(nn.Module):
 
         self.receiver=receiver
         self.sender=sender
+
+    def send(self, sender_input):
+
+      return self.sender(sender_input)
+
+    def receive(self,message, receiver_input, message_lengths,imitate=True):
+
+      return self.receiver(message, receiver_input, message_lengths,imitate)
+
+    def imitate(self,sender_input,imitate=True):
+
+      return self.sender(sender_input,imitate)
+
+
+class AgentSharedEmbedding(nn.Module):
+
+    """
+    AgentBaseline is composed of a couple of modalities:
+        - sender
+        - receiver
+    In AgentBaseline, Sender and Receiver parts are independent
+    """
+
+    def __init__(self,
+                receiver,
+                sender,
+                vocab_size,
+                max_len,
+                sender_embedding,
+                sender_hidden,
+                sender_cell,
+                sender_num_layers,
+                force_eos,
+                receiver_embedding,
+                receiver_hidden,
+                receiver_cell,
+                receiver_num_layers):
+        super(AgentSharedEmbedding, self).__init__()
+
+        assert sender_embedding==receiver_embedding, "Sender and receiver embedding sizes have to match"
+
+        self.embedding_layer=nn.Embedding(vocab_size, sender_embedding)
+
+        self.sender = RnnSenderReinforceExternalEmbedding(sender, self.embedding_layer,
+                                   vocab_size, sender_embedding, sender_hidden,
+                                   cell=sender_cell, max_len=max_len, num_layers=sender_num_layers,
+                                   force_eos=force_eos)
+
+        self.receiver = RnnReceiverDeterministicExternalEmbedding(receiver,self.embedding_layer, vocab_size, receiver_embedding,
+                                               receiver_hidden, cell=receiver_cell,
+                                               num_layers=receiver_num_layers)
 
     def send(self, sender_input):
 
@@ -1524,7 +1757,7 @@ class DialogReinforceModel4(nn.Module):
         loss_12_comm, loss_12_imitation, rest_12 = self.loss(sender_input, message_1, receiver_input, receiver_output_12,message_reconstruction_12,prob_reconstruction_12, labels)
 
         # Imitation loss weighted by likelihood of candidate
-        loss_12_imitation = loss_12_imitation * prob_r_12.max(1).values
+        loss_12_imitation = loss_12_imitation #* prob_r_12.max(1).values
         loss_12_imitation=loss_12_imitation.mean()
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
@@ -1581,7 +1814,7 @@ class DialogReinforceModel4(nn.Module):
         loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
 
         # Imitation loss weighted by likelihood of candidate
-        loss_11_imitation = loss_11_imitation * prob_r_11.max(1).values
+        loss_11_imitation = loss_11_imitation #* prob_r_11.max(1).values
         loss_11_imitation=loss_11_imitation.mean()
 
         weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff + \
@@ -1629,7 +1862,7 @@ class DialogReinforceModel4(nn.Module):
         loss_21_comm, loss_21_imitation, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21,message_reconstruction_21,prob_reconstruction_21, labels)
 
         # Imitation loss weighted by likelihood of candidate
-        loss_21_imitation = loss_21_imitation * prob_r_21.max(1).values
+        loss_21_imitation = loss_21_imitation #* prob_r_21.max(1).values
         loss_21_imitation=loss_21_imitation.mean()
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
@@ -1687,7 +1920,7 @@ class DialogReinforceModel4(nn.Module):
         loss_22_comm, loss_22_imitation, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22,message_reconstruction_22,prob_reconstruction_22, labels)
 
         # Imitation loss weighted by likelihood of candidate
-        loss_22_imitation = loss_22_imitation * prob_r_22.max(1).values
+        loss_22_imitation = loss_22_imitation #* prob_r_22.max(1).values
         loss_22_imitation=loss_22_imitation.mean()
 
 

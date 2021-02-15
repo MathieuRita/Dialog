@@ -1597,7 +1597,7 @@ class DialogReinforceModel3(nn.Module):
         loss_1_comm, loss_1_imitation, rest_1 = self.loss(sender_input, message_1, receiver_input, receiver_output_1,message_reconstruction_1,prob_reconstruction_1, labels)
 
         # Imitation loss weighted by likelihood of candidate
-        loss_1_imitation = loss_1_imitation * prob_r_1.max(1).values
+        loss_1_imitation = loss_1_imitation #* prob_r_1.max(1).values
         loss_1_imitation=loss_1_imitation.mean()
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
@@ -1655,7 +1655,7 @@ class DialogReinforceModel3(nn.Module):
         loss_2_comm, loss_2_imitation, rest_2 = self.loss(sender_input, message_2, receiver_input, receiver_output_2,message_reconstruction_2,prob_reconstruction_2, labels)
 
         # Imitation loss weighted by likelihood of candidate
-        loss_2_imitation = loss_2_imitation * prob_r_2.max(1).values
+        loss_2_imitation = loss_2_imitation #* prob_r_2.max(1).values
         loss_2_imitation=loss_2_imitation.mean()
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after

@@ -1750,7 +1750,10 @@ class TrainerDialogModel6:
         with torch.no_grad():
             for batch in self.validation_data:
                 batch = move_to(batch, self.device)
-                optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest = self.game(*batch)
+                if not self.imitate:
+                    optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest = self.game(*batch)
+                else:
+                    optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22,loss_12_imitation,loss_21_imitation rest = self.game(*batch)
                 mean_loss += 0.25*(optimized_loss_11 + optimized_loss_12 + optimized_loss_21 + optimized_loss_22)
                 mean_rest = _add_dicts(mean_rest, rest)
                 n_batches += 1
@@ -1765,12 +1768,19 @@ class TrainerDialogModel6:
         n_batches = 0
         self.game.train()
         for batch in self.train_data:
-            optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest = self.game(*batch)
+            if not self.imitate:
+                optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest = self.game(*batch)
+            else:
+                optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22,loss_12_imitation,loss_21_imitation rest = self.game(*batch)
             batch = move_to(batch, self.device)
             mean_rest = _add_dicts(mean_rest, rest)
 
-            optimized_loss_sender_1=optimized_loss_11+optimized_loss_12
-            optimized_loss_sender_2=optimized_loss_21+optimized_loss_22
+            if not self.imitate:
+                optimized_loss_sender_1=optimized_loss_11+optimized_loss_12
+                optimized_loss_sender_2=optimized_loss_21+optimized_loss_22
+            else:
+                optimized_loss_sender_1=optimized_loss_11+optimized_loss_12+loss_21_imitation
+                optimized_loss_sender_2=optimized_loss_21+optimized_loss_22+loss_12_imitation
 
             self.optimizer.zero_grad()
             if np.random.rand()>0.5:

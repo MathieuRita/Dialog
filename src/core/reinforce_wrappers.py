@@ -1078,15 +1078,77 @@ class AgentSharedLSTM(nn.Module):
       entropy = torch.stack(entropy).permute(1, 0)
 
       # Here choose EOS
-      sequence=sequence[:,-1,:]
+      #sequence=sequence[:,-1,:]
+      #logits=logits[:,-1]
+      #entropy=entropy[:,-1]
+
+      output=[]
+      for j in range(sequence.size(0)):
+        output.append(sequence[j,message_lengths[j]-1,:])
+
+      output=torch.stack(output)
       logits=logits[:,-1]
       entropy=entropy[:,-1]
 
+      return output, logits, entropy
+
+    def imitate(self,sender_input):
+
+      prev_hidden = [self.agent_sender(x)]
+      prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers - 1)])
+
+      prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers)]  # only used for LSTM
+
+      input = torch.stack([self.sos_embedding] * x.size(0))
+
+      sequence = []
+      logits = []
+      entropy = []
+
+      for step in range(self.max_len):
+          for i, layer in enumerate(self.cells):
+              if isinstance(layer, nn.LSTMCell):
+                  h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
+                  h_t = self.norm_h(h_t)
+                  c_t = self.norm_h(c_t)
+                  prev_c[i] = c_t
+              else:
+                  h_t = layer(input, prev_hidden[i])
+                  h_t = self.norm_h(h_t)
+              prev_hidden[i] = h_t
+              input = h_t
+
+
+          step_logits = F.log_softmax(self.hidden_to_output(h_t), dim=1)
+
+          distr = Categorical(logits=step_logits)
+          entropy.append(distr.entropy())
+
+          if self.training:
+              x = distr.sample()
+          else:
+              x = step_logits.argmax(dim=1)
+
+          logits.append(distr.probs)
+
+
+          input = self.embedding(x)
+          sequence.append(x)
+
+      sequence = torch.stack(sequence).permute(1, 0)
+
+      logits = torch.stack(logits).permute(1,2, 0)
+
+      entropy = torch.stack(entropy).permute(1, 0)
+
+      if self.force_eos:
+          zeros = torch.zeros((sequence.size(0), 1)).to(sequence.device)
+
+          sequence = torch.cat([sequence, zeros.long()], dim=1)
+          logits = torch.cat([logits, zeros], dim=1)
+          entropy = torch.cat([entropy, zeros], dim=1)
+
       return sequence, logits, entropy
-
-    def imitate(self,sender_input,imitate=True):
-
-      raise NotImplementedError
 
 class DialogReinforceBaseline(nn.Module):
 
@@ -2260,6 +2322,7 @@ class DialogReinforceModel6(nn.Module):
                  receiver_entropy_coeff_1,
                  sender_entropy_coeff_2,
                  receiver_entropy_coeff_2,
+                 imitate,
                  device,
                  loss_weights=[[0.25,0.25],[0.25,0.25]],
                  length_cost=0.0,
@@ -2283,6 +2346,7 @@ class DialogReinforceModel6(nn.Module):
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.reg=reg
+        self.imitate=imitate
 
     def forward(self, sender_input, labels, receiver_input=None):
 
@@ -2300,7 +2364,14 @@ class DialogReinforceModel6(nn.Module):
 
         receiver_output_12, log_prob_r_12, entropy_r_12 = self.agent_2.receive(message_1, receiver_input, message_lengths_1)
 
-        loss_12, rest_12 = self.loss(sender_input, message_1, receiver_input, receiver_output_12, labels)
+        if self.imitate:
+          candidates_12=receiver_output_12.argmax(dim=1)
+          message_reconstruction_12, prob_reconstruction_12, _ = self.agent_2.imitate(sender_input,imitate=True)
+          loss_12_comm, loss_12_imitation, rest_12 = self.loss(sender_input, message_1, receiver_input, receiver_output_12,message_reconstruction_12,prob_reconstruction_12, labels)
+
+        else:
+          loss_12, rest_12 = self.loss(sender_input, message_1, receiver_input, receiver_output_12, labels)
+
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_1 = torch.zeros_like(entropy_r_12)
@@ -2390,7 +2461,13 @@ class DialogReinforceModel6(nn.Module):
 
         receiver_output_21, log_prob_r_21, entropy_r_21 = self.agent_1.receive(message_2, receiver_input, message_lengths_2)
 
-        loss_21, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21, labels)
+        if self.imitate:
+          candidates_21=receiver_output_21.argmax(dim=1)
+          message_reconstruction_21, prob_reconstruction_21, _ = self.agent_1.imitate(sender_input,imitate=True)
+          loss_21_comm, loss_21_imitation, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21,message_reconstruction_21,prob_reconstruction_21, labels)
+
+        else:
+          loss_21, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21, labels)
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_2 = torch.zeros_like(entropy_r_21)
@@ -2492,7 +2569,11 @@ class DialogReinforceModel6(nn.Module):
         rest['acc']=self.loss_weights[0][0]*rest_11['acc'] + self.loss_weights[0][1]*rest_12['acc']+ \
                          self.loss_weights[1][0]*rest_21['acc'] + self.loss_weights[1][1]*rest_22['acc']
 
-        return optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest
+        if not self.imitate:
+            return optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest
+        else:
+            return optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22,loss_12_imitation,loss_21_imitation rest
+
 
     def update_baseline(self, name, value):
         self.n_points[name] += 1

@@ -100,6 +100,8 @@ def get_params(params):
                         help='Schedule entropy coefficient')
     parser.add_argument('--pretrain_agent_2', type=bool, default=False,
                         help='Schedule entropy coefficient')
+    parser.add_argument('--imitate', type=bool, default=False,
+                        help='Imitation')
 
     args = core.init(parser, params)
 
@@ -1280,18 +1282,32 @@ def main(params):
                                     cell=opts.sender_cell,
                                     num_layers=opts.sender_num_layers,
                                     force_eos=force_eos)
-
-            game = DialogReinforceModel6(Agent_1=agent_1,
-                                           Agent_2=agent_2,
-                                           loss=loss,
-                                           sender_entropy_coeff_1=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
-                                           sender_entropy_coeff_2=opts.sender_entropy_coeff,
-                                           receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
-                                           length_cost=0.0,
-                                           unigram_penalty=0.0,
-                                           reg=False,
-                                           device=device)
+            if not opts.imitate:
+                game = DialogReinforceModel6(Agent_1=agent_1,
+                                               Agent_2=agent_2,
+                                               loss=loss,
+                                               sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                               receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                               sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                               receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
+                                               imitate=opts.imitate,
+                                               length_cost=0.0,
+                                               unigram_penalty=0.0,
+                                               reg=False,
+                                               device=device)
+            else:
+                game = DialogReinforceModel6(Agent_1=agent_1,
+                                               Agent_2=agent_2,
+                                               loss=loss_model_3,
+                                               sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                               receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                               sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                               receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
+                                               imitate=opts.imitate,
+                                               length_cost=0.0,
+                                               unigram_penalty=0.0,
+                                               reg=False,
+                                               device=device)
 
             #optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
             #optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))

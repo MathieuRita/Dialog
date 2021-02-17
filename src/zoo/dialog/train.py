@@ -17,7 +17,7 @@ from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient,levenshtein
 #Dialog
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
-from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedEmbedding,AgentSharedLSTM
+from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedLSTM#,AgentSharedEmbedding
 from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent,DialogReinforceModel6
 from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining_u
 from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6

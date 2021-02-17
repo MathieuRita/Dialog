@@ -1303,6 +1303,7 @@ def main(params):
                                                receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
                                                sender_entropy_coeff_2=opts.sender_entropy_coeff,
                                                receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
+                                               imitate=opts.imitate,
                                                length_cost=0.0,
                                                unigram_penalty=0.0,
                                                reg=False,

@@ -2368,7 +2368,7 @@ class DialogReinforceModel6(nn.Module):
           candidates_12=receiver_output_12.argmax(dim=1)
           message_reconstruction_12, prob_reconstruction_12, _ = self.agent_2.imitate(sender_input)
           loss_12, loss_12_imitation, rest_12 = self.loss(sender_input, message_1, receiver_input, receiver_output_12,message_reconstruction_12,prob_reconstruction_12, labels)
-
+          loss_12_imitation=loss_12_imitation.mean()
         else:
           loss_12, rest_12 = self.loss(sender_input, message_1, receiver_input, receiver_output_12, labels)
 
@@ -2424,6 +2424,7 @@ class DialogReinforceModel6(nn.Module):
           candidates_11=receiver_output_11.argmax(dim=1)
           message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(sender_input)
           loss_11, loss_11_imitation, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
+          loss_11_imitation=loss_11_imitation.mean()
         else:
           loss_11, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11, labels)
 
@@ -2470,7 +2471,7 @@ class DialogReinforceModel6(nn.Module):
           candidates_21=receiver_output_21.argmax(dim=1)
           message_reconstruction_21, prob_reconstruction_21, _ = self.agent_1.imitate(sender_input)
           loss_21, loss_21_imitation, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21,message_reconstruction_21,prob_reconstruction_21, labels)
-
+          loss_21_imitation=loss_21_imitation.mean()
         else:
           loss_21, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21, labels)
 
@@ -2526,6 +2527,7 @@ class DialogReinforceModel6(nn.Module):
           candidates_22=receiver_output_22.argmax(dim=1)
           message_reconstruction_22, prob_reconstruction_22, _ = self.agent_2.imitate(sender_input)
           loss_22, loss_22_imitation, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22,message_reconstruction_22,prob_reconstruction_22, labels)
+          loss_22_imitation=loss_22_imitation.mean()
         else:
           loss_22, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22, labels)
 

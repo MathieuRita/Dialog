@@ -2422,7 +2422,7 @@ class DialogReinforceModel6(nn.Module):
 
         if self.imitate:
           candidates_11=receiver_output_11.argmax(dim=1)
-          message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(sender_input,imitate=True)
+          message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(sender_input)
           loss_11, loss_11_imitation, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
         else:
           loss_11, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11, labels)
@@ -2468,7 +2468,7 @@ class DialogReinforceModel6(nn.Module):
 
         if self.imitate:
           candidates_21=receiver_output_21.argmax(dim=1)
-          message_reconstruction_21, prob_reconstruction_21, _ = self.agent_1.imitate(sender_input,imitate=True)
+          message_reconstruction_21, prob_reconstruction_21, _ = self.agent_1.imitate(sender_input)
           loss_21, loss_21_imitation, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21,message_reconstruction_21,prob_reconstruction_21, labels)
 
         else:
@@ -2524,7 +2524,7 @@ class DialogReinforceModel6(nn.Module):
 
         if self.imitate:
           candidates_22=receiver_output_22.argmax(dim=1)
-          message_reconstruction_22, prob_reconstruction_22, _ = self.agent_2.imitate(sender_input,imitate=True)
+          message_reconstruction_22, prob_reconstruction_22, _ = self.agent_2.imitate(sender_input)
           loss_22, loss_22_imitation, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22,message_reconstruction_22,prob_reconstruction_22, labels)
         else:
           loss_22, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22, labels)

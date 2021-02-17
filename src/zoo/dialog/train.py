@@ -1136,15 +1136,11 @@ def main(params):
                                     sender=sender_1,
                                     vocab_size=opts.vocab_size,
                                     max_len=opts.max_len,
-                                    sender_embedding=opts.sender_embedding,
-                                    sender_hidden=opts.sender_hidden,
-                                    sender_cell=opts.sender_cell,
-                                    sender_num_layers=opts.sender_num_layers,
-                                    force_eos=force_eos,
-                                    receiver_embedding=opts.receiver_embedding,
-                                    receiver_hidden=opts.receiver_hidden,
-                                    receiver_cell=opts.receiver_cell,
-                                    receiver_num_layers=opts.receiver_num_layers)
+                                    embed_dim=opts.sender_embedding,
+                                    hidden_size=opts.sender_hidden,
+                                    cell=opts.sender_cell,
+                                    num_layers=opts.sender_num_layers,
+                                    force_eos=force_eos)
 
             "Agent 2"
 

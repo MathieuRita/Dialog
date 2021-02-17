@@ -918,15 +918,11 @@ class AgentSharedLSTM(nn.Module):
                 sender,
                 vocab_size,
                 max_len,
-                sender_embedding,
-                sender_hidden,
-                sender_cell,
-                sender_num_layers,
-                force_eos,
-                receiver_embedding,
-                receiver_hidden,
-                receiver_cell,
-                receiver_num_layers):
+                embed_dim,
+                hidden_size,
+                cell,
+                num_layers,
+                force_eos):
         super(AgentSharedLSTM, self).__init__()
 
         assert sender_embedding==receiver_embedding, "Sender and receiver embedding sizes have to match"
@@ -1040,10 +1036,11 @@ class AgentSharedLSTM(nn.Module):
 
       packed = nn.utils.rnn.pack_padded_sequence(
           emb, lengths.cpu(), batch_first=True, enforce_sorted=False)
-      _, rnn_hidden = self.cell(packed)
+      for i, layer in enumerate(self.cells):
+          _, rnn_hidden = layer(packed)
 
-      if isinstance(self.cell, nn.LSTM):
-          rnn_hidden, _ = rnn_hidden
+          if isinstance(self.cell, nn.LSTM):
+              rnn_hidden, _ = rnn_hidden
 
       return rnn_hidden[-1]
 

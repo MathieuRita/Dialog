@@ -1399,7 +1399,7 @@ def main(params):
             elif opts.model=="model_6":
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_6(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="pretraining":
                 acc_vec_1, messages_1 = dump_pretraining(trainer.game, opts.n_features,pretrained_messages, device, False,epoch)
 
@@ -1428,10 +1428,14 @@ def main(params):
             all_messages_2 = np.asarray(all_messages_2)
 
             if epoch%50==0:
-                torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
-                torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
-                torch.save(agent_2.sender.state_dict(), f"{opts.dir_save}/sender/agent_2_sender_weights_{epoch}.pth")
-                torch.save(agent_2.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_2_receiver_weights_{epoch}.pth")
+                if opts.model!="model_6":
+                    torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
+                    torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
+                    torch.save(agent_2.sender.state_dict(), f"{opts.dir_save}/sender/agent_2_sender_weights_{epoch}.pth")
+                    torch.save(agent_2.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_2_receiver_weights_{epoch}.pth")
+                else:
+                    torch.save(agent_1.state_dict(), f"{opts.dir_save}/sender/agent_1_weights_{epoch}.pth")
+                    torch.save(agent_2.state_dict(), f"{opts.dir_save}/sender/agent_2_weights_{epoch}.pth")
 
             np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
             np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)

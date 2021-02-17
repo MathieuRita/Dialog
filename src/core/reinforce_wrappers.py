@@ -1030,6 +1030,8 @@ class AgentSharedLSTM(nn.Module):
 
     def receive(self,message, receiver_input, message_lengths):
 
+      if message_lengths is None:
+        message_lengths=find_lengths(message)
 
       prev_hidden = [torch.zeros((message.size(0),self.hidden_size)).to("cuda")]
       prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers - 1)])

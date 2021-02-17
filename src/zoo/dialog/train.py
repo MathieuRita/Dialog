@@ -17,10 +17,10 @@ from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient,levenshtein
 #Dialog
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
-from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedEmbedding
-from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent
+from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedEmbedding,AgentSharedLSTM
+from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent,DialogReinforceModel6
 from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining_u
-from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining
+from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
 
 
 def get_params(params):
@@ -1123,6 +1123,74 @@ def main(params):
                                           optimizer_embedding_1=optimizer_embedding_1,optimizer_embedding_2=optimizer_embedding_2, train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
+        elif opts.model=="model_6":
+
+            "Agent 1"
+
+            sender_1 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+
+            receiver_1 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+
+
+            agent_1=AgentSharedLSTM(receiver=receiver_1,
+                                    sender=sender_1,
+                                    vocab_size=opts.vocab_size,
+                                    max_len=opts.max_len,
+                                    sender_embedding=opts.sender_embedding,
+                                    sender_hidden=opts.sender_hidden,
+                                    sender_cell=opts.sender_cell,
+                                    sender_num_layers=opts.sender_num_layers,
+                                    force_eos=force_eos,
+                                    receiver_embedding=opts.receiver_embedding,
+                                    receiver_hidden=opts.receiver_hidden,
+                                    receiver_cell=opts.receiver_cell,
+                                    receiver_num_layers=opts.receiver_num_layers)
+
+            "Agent 2"
+
+            sender_2 = Sender(n_features=opts.n_features, n_hidden=opts.sender_hidden)
+
+            receiver_2 = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
+
+            agent_2=AgentSharedLSTM(receiver=receiver_2,
+                                    sender=sender_2,
+                                    vocab_size=opts.vocab_size,
+                                    max_len=opts.max_len,
+                                    sender_embedding=opts.sender_embedding,
+                                    sender_hidden=opts.sender_hidden,
+                                    sender_cell=opts.sender_cell,
+                                    sender_num_layers=opts.sender_num_layers,
+                                    force_eos=force_eos,
+                                    receiver_embedding=opts.receiver_embedding,
+                                    receiver_hidden=opts.receiver_hidden,
+                                    receiver_cell=opts.receiver_cell,
+                                    receiver_num_layers=opts.receiver_num_layers)
+
+            game = DialogReinforceModel6(Agent_1=agent_1,
+                                           Agent_2=agent_2,
+                                           loss=loss,
+                                           sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                           sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                           receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
+                                           length_cost=0.0,
+                                           unigram_penalty=0.0,
+                                           reg=False,
+                                           device=device)
+
+            #optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
+            #optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
+            #optimizer_embedding_1 = core.build_optimizer(list(game.agent_1.embedding_layer.parameters()))
+            #optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
+            #optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+            #optimizer_embedding_2 = core.build_optimizer(list(game.agent_2.embedding_layer.parameters()))
+
+            optimizer = core.build_optimizer(game.parameters())
+
+            trainer = TrainerDialogModel6(game=game, optimizer=optimizer, train_data=train_loader, \
+                                          validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+
         elif opts.model=="pretraining":
 
             "Agent 1"
@@ -1210,6 +1278,10 @@ def main(params):
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
                 messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             elif opts.model=="model_5":
+                if epoch==0:
+                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+            elif opts.model=="model_6":
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
                 messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)

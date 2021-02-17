@@ -246,8 +246,8 @@ def loss_model_3(sender_input, message, receiver_input, receiver_output,message_
 
     # 1. len_mask selects only the symbols before EOS-token
     if message_length is not None:
-        to_onehot=torch.eye(_message.size(1)).to("cuda")
-        to_onehot=torch.cat((to_onehot,torch.zeros((1,_message.size(1))).to("cuda")),0)
+        to_onehot=torch.eye(message.size(1)).to("cuda")
+        to_onehot=torch.cat((to_onehot,torch.zeros((1,message.size(1))).to("cuda")),0)
         len_mask=[]
         for i in range(message_length.size(0)):
           len_mask.append(to_onehot[message_length[i]])

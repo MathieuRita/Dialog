@@ -19,7 +19,7 @@ from src.core.util import dump_sender_receiver_impatient,levenshtein
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
 from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedLSTM#,AgentSharedEmbedding
 from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent,DialogReinforceModel6
-from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining_u
+from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining_u,dump_sender_receiver_dialog_model_6
 from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
 
 
@@ -584,6 +584,129 @@ def dump_dialog_model_2(game, n_features, device, gs_mode, epoch,past_messages_1
     print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
 
     return acc_vec_1, messages_1, acc_vec_2, messages_2
+
+def dump_dialog_model_6(game, n_features, device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
+    # tiny "dataset"
+    dataset = [[torch.eye(n_features).to(device), None]]
+
+    sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_11,receiver_outputs_12, \
+    sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_21,receiver_outputs_22, _ = \
+        dump_sender_receiver_dialog_model_6(game, dataset, gs=gs_mode, device=device, variable_length=True)
+
+
+    print("Language 1 (Agent 1 -> Agent 2)")
+
+    "1->2"
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_1=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_12):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_1[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%20==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    "1->1"
+    print("internal listener")
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_11=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_11):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_11  [int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%20==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    print("Language 2 (Agent 2 -> Agent 1)")
+
+    "2->1"
+
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_2=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_21):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_2[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%20==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    print("internal listener")
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    acc_vec_22=np.zeros(n_features)
+
+    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_22):
+        input_symbol = sender_input.argmax()
+        output_symbol = receiver_output.argmax()
+        acc = (input_symbol == output_symbol).float().item()
+
+        acc_vec_22[int(input_symbol)]=acc
+
+        unif_acc += acc
+        powerlaw_acc += powerlaw_probs[input_symbol] * acc
+        if epoch%20==0:
+            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
+
+    unif_acc /= n_features
+    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
+
+    #messages_1=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_1]
+    #messages_2=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_2]
+
+
+    print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],messages_2[i]) for i in range(len(messages_1))])),flush=True)
+
+    if past_messages_1 is not None:
+        print("Similarity evo language 1 = {}".format(np.mean([levenshtein(messages_1[i],past_messages_1[i]) for i in range(len(messages_1))])),flush=True)
+    if past_messages_2 is not None:
+        print("Similarity evo language 2 = {}".format(np.mean([levenshtein(messages_2[i],past_messages_2[i]) for i in range(len(messages_2))])),flush=True)
+
+
+    return messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22
 
 def dump_pretraining(game, n_features,pretrained_messages, device, gs_mode, epoch):
     # tiny "dataset"
@@ -1152,15 +1275,11 @@ def main(params):
                                     sender=sender_2,
                                     vocab_size=opts.vocab_size,
                                     max_len=opts.max_len,
-                                    sender_embedding=opts.sender_embedding,
-                                    sender_hidden=opts.sender_hidden,
-                                    sender_cell=opts.sender_cell,
-                                    sender_num_layers=opts.sender_num_layers,
-                                    force_eos=force_eos,
-                                    receiver_embedding=opts.receiver_embedding,
-                                    receiver_hidden=opts.receiver_hidden,
-                                    receiver_cell=opts.receiver_cell,
-                                    receiver_num_layers=opts.receiver_num_layers)
+                                    embed_dim=opts.sender_embedding,
+                                    hidden_size=opts.sender_hidden,
+                                    cell=opts.sender_cell,
+                                    num_layers=opts.sender_num_layers,
+                                    force_eos=force_eos)
 
             game = DialogReinforceModel6(Agent_1=agent_1,
                                            Agent_2=agent_2,

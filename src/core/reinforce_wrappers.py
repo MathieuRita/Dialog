@@ -925,7 +925,7 @@ class AgentSharedLSTM(nn.Module):
                 force_eos):
         super(AgentSharedLSTM, self).__init__()
 
-        assert sender_embedding==receiver_embedding, "Sender and receiver embedding sizes have to match"
+        #assert sender_embedding==receiver_embedding, "Sender and receiver embedding sizes have to match"
 
         #self.embedding_layer=nn.Embedding(vocab_size, sender_embedding)
 
@@ -956,6 +956,7 @@ class AgentSharedLSTM(nn.Module):
         self.vocab_size = vocab_size
         self.num_layers = num_layers
         self.cells = None
+        self.hidden_size=hidden_size
 
         cell = cell.lower()
         cell_types = {'rnn': nn.RNNCell, 'gru': nn.GRUCell, 'lstm': nn.LSTMCell}
@@ -1029,20 +1030,57 @@ class AgentSharedLSTM(nn.Module):
 
     def receive(self,message, receiver_input, message_lengths):
 
-      emb = self.embedding(message)
 
-      if lengths is None:
-          lengths = find_lengths(message)
+      prev_hidden = [torch.zeros((message.size(0),self.hidden_size)).to("cuda")]
+      prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers - 1)])
 
-      packed = nn.utils.rnn.pack_padded_sequence(
-          emb, lengths.cpu(), batch_first=True, enforce_sorted=False)
-      for i, layer in enumerate(self.cells):
-          _, rnn_hidden = layer(packed)
+      prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers)]  # only used for LSTM
 
-          if isinstance(self.cell, nn.LSTM):
-              rnn_hidden, _ = rnn_hidden
+      inputs = self.embedding(message)
 
-      return rnn_hidden[-1]
+      sequence = []
+      logits = []
+      entropy = []
+
+      for step in range(self.max_len):
+
+          input=inputs[:,step,:]
+
+          for i, layer in enumerate(self.cells):
+              if isinstance(layer, nn.LSTMCell):
+                  h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
+                  h_t = self.norm_h(h_t)
+                  c_t = self.norm_c(c_t)
+                  prev_c[i] = c_t
+              else:
+                  h_t = layer(input, prev_hidden[i])
+                  h_t = self.norm_h(h_t)
+              prev_hidden[i] = h_t
+
+
+          #step_logits = F.log_softmax(self.agent_receiver(h_t,None), dim=1)
+          agent_output = self.agent_receiver(h_t, None)
+          log = torch.zeros(agent_output.size(0)).to(agent_output.device)
+          ent = log
+
+          #distr = Categorical(logits=step_logits)
+          #entropy.append(distr.entropy())
+          #x=step_logits.argmax(dim=1)
+
+          logits.append(log)
+          entropy.append(ent)
+          sequence.append(agent_output)
+
+      sequence = torch.stack(sequence).permute(1, 0, 2)
+      logits = torch.stack(logits).permute(1, 0)
+      entropy = torch.stack(entropy).permute(1, 0)
+
+      # Here choose EOS
+      sequence=sequence[:,-1,:]
+      logits=logits[:,-1]
+      entropy=entropy[:,-1]
+
+      return sequence, logits, entropy
 
     def imitate(self,sender_input,imitate=True):
 

@@ -243,6 +243,18 @@ def loss_model_3(sender_input, message, receiver_input, receiver_output,message_
     - {acc:acc}: mean accuracy | size=(batch_size)
     - crible_acc: accuracy by position | size=(batch_size,max_len)
     """
+
+    # 1. len_mask selects only the symbols before EOS-token
+    to_onehot=torch.eye(_message.size(1)).to("cuda")
+    to_onehot=torch.cat((to_onehot,torch.zeros((1,_message.size(1))).to("cuda")),0)
+    len_mask=[]
+    for i in range(message_length.size(0)):
+      len_mask.append(to_onehot[message_length[i]])
+    len_mask=torch.stack(len_mask,dim=0)
+
+    len_mask=torch.cumsum(len_mask,dim=1)
+    len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
+
     # Communication task
 
     acc = (receiver_output.argmax(dim=1) == sender_input.argmax(dim=1)).detach().float()
@@ -259,8 +271,8 @@ def loss_model_3(sender_input, message, receiver_input, receiver_output,message_
     loss_imitation = loss_imitation.reshape((loss.size(0),loss_imitation.size(0)//loss.size(0)))
     acc_imitation = acc_imitation.reshape((acc.size(0),acc_imitation.size(0)//acc.size(0)))
 
-    loss_imitation = loss_imitation.mean(dim=1) # Add EOS mask
-    acc_imitation = acc_imitation.mean(dim=1)
+    loss_imitation = (loss_imitation*len_mask).mean(dim=1) # Add EOS mask
+    acc_imitation = (acc_imitation*len_mask).mean(dim=1)
 
     return loss,loss_imitation, {'acc': acc}
 

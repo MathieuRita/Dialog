@@ -1958,7 +1958,9 @@ class DialogReinforceModel4(nn.Module):
         message_1, log_prob_s_1, entropy_s_1 = self.agent_1.sender(sender_input)
         message_lengths_1 = find_lengths(message_1)
 
-
+        a_self=3.
+        a_cross=1.
+        a_im=1.
 
         "1.2 Agent_1 -> Agent_2"
 
@@ -2033,7 +2035,7 @@ class DialogReinforceModel4(nn.Module):
         loss_11_imitation = loss_11_imitation #* prob_r_11.max(1).values
         #loss_11_imitation=loss_11_imitation.mean()
 
-        loss_11_comm=loss_11_comm+loss_12_comm+loss_12_imitation
+        loss_11_comm=a_self*loss_11_comm+a_cross*loss_12_comm+a_im*loss_12_imitation
 
         weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
                 entropy_r_11.mean() * self.receiver_entropy_coeff_1
@@ -2142,7 +2144,7 @@ class DialogReinforceModel4(nn.Module):
         loss_22_imitation = loss_22_imitation #* prob_r_22.max(1).values
         #loss_22_imitation=loss_22_imitation.mean()
 
-        loss_22_comm=loss_22_comm+loss_21_comm+loss_21_imitation
+        loss_22_comm=a_self*loss_22+a_cross*loss_21_comm+a_im*loss_21_imitation
 
 
         weighted_entropy_22 = effective_entropy_s_2.mean() * self.sender_entropy_coeff_2 + \
@@ -2361,7 +2363,9 @@ class DialogReinforceModel6(nn.Module):
         message_1, log_prob_s_1, entropy_s_1 = self.agent_1.send(sender_input)
         message_lengths_1 = find_lengths(message_1)
 
-        a=1.
+        a_self=3.
+        a_cross=1.
+        a_im=1.
 
         "1.2 Agent_1 -> Agent_2"
 
@@ -2430,7 +2434,7 @@ class DialogReinforceModel6(nn.Module):
           message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(sender_input)
           loss_11, loss_11_imitation, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels,message_lengths_1)
           #loss_11_imitation=loss_11_imitation.mean()
-          loss_11=loss_11+loss_12+a*loss_12_imitation
+          loss_11=a_self*loss_11+a_cross*loss_12+a_im*loss_12_imitation
         else:
           loss_11, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11, labels)
 
@@ -2535,7 +2539,7 @@ class DialogReinforceModel6(nn.Module):
           message_reconstruction_22, prob_reconstruction_22, _ = self.agent_2.imitate(sender_input)
           loss_22, loss_22_imitation, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22,message_reconstruction_22,prob_reconstruction_22, labels,message_lengths_2)
           #loss_22_imitation=loss_22_imitation.mean()
-          loss_22=loss_22+loss_21+a*loss_21_imitation
+          loss_22=a_self*loss_22+a_cross*loss_21+a_im*loss_21_imitation
         else:
           loss_22, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22, labels)
 

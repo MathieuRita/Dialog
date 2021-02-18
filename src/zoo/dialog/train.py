@@ -273,8 +273,13 @@ def loss_model_3(sender_input, message, receiver_input, receiver_output,message_
     acc_imitation = acc_imitation.reshape((acc.size(0),acc_imitation.size(0)//acc.size(0)))
 
     if message_length is not None:
-      loss_imitation = (loss_imitation*len_mask)/len_mask.sum(1) # Add EOS mask
-      acc_imitation = (acc_imitation*len_mask)/len_mask.sum(1)
+      loss_imitation=loss_imitation*len_mask
+      loss_imitation/= len_mask.sum(1)
+      acc_imitation=acc_imitation*len_mask 
+      acc_imitation/= len_mask.sum(1)
+      #loss_imitation = (loss_imitation*len_mask)/len_mask.sum(1) # Add EOS mask
+      #acc_imitation = (acc_imitation*len_mask)/len_mask.sum(1)
+
       loss_imitation=loss_imitation.sum(1)
       acc_imitation=acc_imitation.sum(1)
     else:

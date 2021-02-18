@@ -1974,7 +1974,7 @@ class DialogReinforceModel4(nn.Module):
 
         # Imitation loss weighted by likelihood of candidate
         loss_12_imitation = loss_12_imitation #* prob_r_12.max(1).values
-        loss_12_imitation=loss_12_imitation.mean()
+        #loss_12_imitation=loss_12_imitation.mean()
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_1 = torch.zeros_like(entropy_r_12)
@@ -2031,7 +2031,9 @@ class DialogReinforceModel4(nn.Module):
 
         # Imitation loss weighted by likelihood of candidate
         loss_11_imitation = loss_11_imitation #* prob_r_11.max(1).values
-        loss_11_imitation=loss_11_imitation.mean()
+        #loss_11_imitation=loss_11_imitation.mean()
+
+        loss_11_comm=loss_11_comm+loss_12_comm+loss_12_imitation
 
         weighted_entropy_11 = effective_entropy_s_1.mean() * self.sender_entropy_coeff_1 + \
                 entropy_r_11.mean() * self.receiver_entropy_coeff_1
@@ -2046,6 +2048,7 @@ class DialogReinforceModel4(nn.Module):
         optimized_loss_11 = policy_length_loss_11 + policy_loss_11 - weighted_entropy_11
 
         # if the receiver is deterministic/differentiable, we apply the actual loss
+
         optimized_loss_11 += loss_11_comm.mean()
 
         if self.training:
@@ -2079,7 +2082,7 @@ class DialogReinforceModel4(nn.Module):
 
         # Imitation loss weighted by likelihood of candidate
         loss_21_imitation = loss_21_imitation #* prob_r_21.max(1).values
-        loss_21_imitation=loss_21_imitation.mean()
+        #loss_21_imitation=loss_21_imitation.mean()
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
         effective_entropy_s_2 = torch.zeros_like(entropy_r_21)
@@ -2137,7 +2140,9 @@ class DialogReinforceModel4(nn.Module):
 
         # Imitation loss weighted by likelihood of candidate
         loss_22_imitation = loss_22_imitation #* prob_r_22.max(1).values
-        loss_22_imitation=loss_22_imitation.mean()
+        #loss_22_imitation=loss_22_imitation.mean()
+
+        loss_22_comm=loss_22_comm+loss_21_comm+loss_21_imitation
 
 
         weighted_entropy_22 = effective_entropy_s_2.mean() * self.sender_entropy_coeff_2 + \
@@ -2579,6 +2584,9 @@ class DialogReinforceModel6(nn.Module):
                             self.loss_weights[1][0]*rest_21['mean_length'] + self.loss_weights[1][1]*rest_22['mean_length']
         rest['acc']=self.loss_weights[0][0]*rest_11['acc'] + self.loss_weights[0][1]*rest_12['acc']+ \
                          self.loss_weights[1][0]*rest_21['acc'] + self.loss_weights[1][1]*rest_22['acc']
+
+        rest['acc_21']=rest_21['acc']
+        rest['acc_12']=rest_12['acc']
 
         if not self.imitate:
             return optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest

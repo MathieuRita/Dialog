@@ -1972,7 +1972,7 @@ class DialogReinforceModel4(nn.Module):
 
         message_reconstruction_12, prob_reconstruction_12, _ = self.agent_2.imitate(sender_input,imitate=True)
 
-        loss_12_comm, loss_12_imitation, rest_12 = self.loss(sender_input, message_1, receiver_input, receiver_output_12,message_reconstruction_12,prob_reconstruction_12, labels)
+        loss_12_comm, loss_12_imitation, rest_12 = self.loss(sender_input, message_1, receiver_input, receiver_output_12,message_reconstruction_12,prob_reconstruction_12, labels,message_lengths_1)
 
         # Imitation loss weighted by likelihood of candidate
         loss_12_imitation = loss_12_imitation #* prob_r_12.max(1).values
@@ -2029,7 +2029,7 @@ class DialogReinforceModel4(nn.Module):
 
         message_reconstruction_11, prob_reconstruction_11, _ = self.agent_1.imitate(sender_input,imitate=True)
 
-        loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels)
+        loss_11_comm, loss_11_imitation, rest_11 = self.loss(sender_input, message_1, receiver_input, receiver_output_11,message_reconstruction_11,prob_reconstruction_11, labels,message_lengths_1)
 
         # Imitation loss weighted by likelihood of candidate
         loss_11_imitation = loss_11_imitation #* prob_r_11.max(1).values
@@ -2080,7 +2080,7 @@ class DialogReinforceModel4(nn.Module):
 
         message_reconstruction_21, prob_reconstruction_21, _ = self.agent_1.imitate(sender_input,imitate=True)
 
-        loss_21_comm, loss_21_imitation, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21,message_reconstruction_21,prob_reconstruction_21, labels)
+        loss_21_comm, loss_21_imitation, rest_21 = self.loss(sender_input, message_2, receiver_input, receiver_output_21,message_reconstruction_21,prob_reconstruction_21, labels,message_lengths_2)
 
         # Imitation loss weighted by likelihood of candidate
         loss_21_imitation = loss_21_imitation #* prob_r_21.max(1).values
@@ -2138,7 +2138,7 @@ class DialogReinforceModel4(nn.Module):
 
         message_reconstruction_22, prob_reconstruction_22, _ = self.agent_2.imitate(sender_input,imitate=True)
 
-        loss_22_comm, loss_22_imitation, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22,message_reconstruction_22,prob_reconstruction_22, labels)
+        loss_22_comm, loss_22_imitation, rest_22 = self.loss(sender_input, message_2, receiver_input, receiver_output_22,message_reconstruction_22,prob_reconstruction_22, labels, message_lengths_2)
 
         # Imitation loss weighted by likelihood of candidate
         loss_22_imitation = loss_22_imitation #* prob_r_22.max(1).values

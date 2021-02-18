@@ -1757,7 +1757,7 @@ class TrainerDialogModel6:
                     optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22, rest = self.game(*batch)
                 else:
                     optimized_loss_11, optimized_loss_12, optimized_loss_21, optimized_loss_22,loss_12_imitation,loss_21_imitation, rest = self.game(*batch)
-                mean_loss += 0.25*(optimized_loss_11 + optimized_loss_12 + optimized_loss_21 + optimized_loss_22)
+                mean_loss += 0.5*(optimized_loss_11 + optimized_loss_22)
                 mean_rest = _add_dicts(mean_rest, rest)
                 n_batches += 1
         mean_loss /= n_batches
@@ -1780,13 +1780,15 @@ class TrainerDialogModel6:
 
             if not self.game.imitate:
                 optimized_loss_sender_1=optimized_loss_11+optimized_loss_12
-                optimized_loss_sender_2=optimized_loss_21+optimized_loss_22
+                optimized_loss_sender_2=optimized_loss_22+optimized_loss_21
             else:
 
-                a=10*rest["acc_12"]
-                b=10*rest["acc_21"]
-                optimized_loss_sender_1=10*optimized_loss_11+optimized_loss_12+a*loss_12_imitation
-                optimized_loss_sender_2=optimized_loss_21+10*optimized_loss_22+b*loss_21_imitation
+                #a=10*rest["acc_12"]
+                #b=10*rest["acc_21"]
+                #optimized_loss_sender_1=10*optimized_loss_11+optimized_loss_12+a*loss_12_imitation
+                #optimized_loss_sender_2=optimized_loss_21+10*optimized_loss_22+b*loss_21_imitation
+                optimized_loss_sender_1=optimized_loss_11
+                optimized_loss_sender_2=optimized_loss_22
 
             self.optimizer.zero_grad()
             if np.random.rand()>0.5:
@@ -1796,7 +1798,7 @@ class TrainerDialogModel6:
             self.optimizer.step()
 
             n_batches += 1
-            mean_loss += 0.25*(optimized_loss_11+optimized_loss_12+optimized_loss_21+optimized_loss_22)
+            mean_loss += 0.5*(optimized_loss_11+optimized_loss_22)
 
 
         mean_loss /= n_batches

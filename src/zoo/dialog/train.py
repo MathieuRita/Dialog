@@ -1269,7 +1269,7 @@ def main(params):
                                           optimizer_embedding_1=optimizer_embedding_1,optimizer_embedding_2=optimizer_embedding_2, train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
-        elif opts.model=="model_6":
+        elif opts.model=="shared_LSTM":
 
             "Agent 1"
 
@@ -1342,6 +1342,70 @@ def main(params):
             trainer = TrainerDialogModel6(game=game, optimizer=optimizer, train_data=train_loader, \
                                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
+        elif opts.model=="shared_embedding":
+
+            "Agent 1"
+
+
+            agent_1=AgentSharedEmbedding(vocab_size=opts.vocab_size,
+                                        max_len=opts.max_len,
+                                        embed_dim=opts.sender_embedding,
+                                        hidden_size=opts.sender_hidden,
+                                        cell_sender=opts.cell_sender,
+                                        cell_receiver=opts.cell_receiver,
+                                        num_layers_sender=opts.num_layers_sender,
+                                        num_layers_receiver=opts.num_layers_receiver,
+                                        force_eos=force_eos)
+
+            "Agent 2"
+
+            agent_2=AgentSharedEmbedding(vocab_size=opts.vocab_size,
+                                        max_len=opts.max_len,
+                                        embed_dim=opts.sender_embedding,
+                                        hidden_size=opts.sender_hidden,
+                                        cell_sender=opts.cell_sender,
+                                        cell_receiver=opts.cell_receiver,
+                                        num_layers_sender=opts.num_layers_sender,
+                                        num_layers_receiver=opts.num_layers_receiver,
+                                        force_eos=force_eos)
+            if not opts.imitate:
+                game = DialogReinforceModel6(Agent_1=agent_1,
+                                               Agent_2=agent_2,
+                                               loss=loss,
+                                               sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                               receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                               sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                               receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
+                                               imitate=opts.imitate,
+                                               length_cost=0.0,
+                                               unigram_penalty=0.0,
+                                               reg=False,
+                                               device=device)
+            else:
+                game = DialogReinforceModel6(Agent_1=agent_1,
+                                               Agent_2=agent_2,
+                                               loss=loss_model_3,
+                                               sender_entropy_coeff_1=opts.sender_entropy_coeff,
+                                               receiver_entropy_coeff_1=opts.receiver_entropy_coeff,
+                                               sender_entropy_coeff_2=opts.sender_entropy_coeff,
+                                               receiver_entropy_coeff_2=opts.receiver_entropy_coeff,
+                                               imitate=opts.imitate,
+                                               length_cost=0.0,
+                                               unigram_penalty=0.0,
+                                               reg=False,
+                                               device=device)
+
+            #optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
+            #optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
+            #optimizer_embedding_1 = core.build_optimizer(list(game.agent_1.embedding_layer.parameters()))
+            #optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
+            #optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+            #optimizer_embedding_2 = core.build_optimizer(list(game.agent_2.embedding_layer.parameters()))
+
+            optimizer = core.build_optimizer(game.parameters())
+
+            trainer = TrainerDialogModel6(game=game, optimizer=optimizer, train_data=train_loader, \
+                                          validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
         elif opts.model=="pretraining":
 

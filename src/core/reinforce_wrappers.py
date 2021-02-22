@@ -1160,6 +1160,7 @@ class AgentSharedEmbedding(nn.Module):
     """
 
     def __init__(self,
+                n_features=,
                 vocab_size,
                 max_len,
                 embed_dim,
@@ -1173,8 +1174,8 @@ class AgentSharedEmbedding(nn.Module):
 
         assert embed_dim==hidden_size, "embed_dim has to be equal to hidden_size"
 
-        self.FC_features = nn.Linear(n_features,hidden_size) #nn.Linear(n_hidden, n_features)
-        self.FC_vocabulary = nn.Linear(hidden_size,vocab_size)
+        self.FC_features = nn.Linear(n_features,hidden_size,bias=False) #nn.Linear(n_hidden, n_features)
+        self.FC_vocabulary = nn.Linear(hidden_size,vocab_size,bias=False)
 
         self.force_eos = force_eos
 
@@ -1183,7 +1184,8 @@ class AgentSharedEmbedding(nn.Module):
             self.max_len -= 1
 
         self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
-        #self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.embedding_speaker = nn.Embedding(vocab_size, embed_dim)
+        self.embedding_listener = nn.Embedding(vocab_size, embed_dim)
         self.sos_embedding = nn.Parameter(torch.zeros(embed_dim))
         self.embed_dim = embed_dim
         self.norm_h = nn.LayerNorm(hidden_size)
@@ -1223,9 +1225,9 @@ class AgentSharedEmbedding(nn.Module):
 
     def send(self, x):
         prev_hidden = [self.FC_features(x)]
-        prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers - 1)])
+        prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers_sender - 1)])
 
-        prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers)]  # only used for LSTM
+        prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers_sender)]  # only used for LSTM
 
         input = torch.stack([self.sos_embedding] * x.size(0))
 
@@ -1234,7 +1236,7 @@ class AgentSharedEmbedding(nn.Module):
         entropy = []
 
         for step in range(self.max_len):
-            for i, layer in enumerate(self.cells):
+            for i, layer in enumerate(self.cells_sender):
                 if isinstance(layer, nn.LSTMCell):
                     h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
                     h_t = self.norm_h(h_t)
@@ -1259,7 +1261,8 @@ class AgentSharedEmbedding(nn.Module):
 
             logits.append(distr.log_prob(x))
 
-            input = torch.nn.functional.embedding(x,weight=self.FC_vocabulary.weight)
+            #input = F.embedding(x,weight=self.FC_vocabulary.weight)
+            input = self.embedding_speaker(x)
             sequence.append(x)
 
         sequence = torch.stack(sequence).permute(1, 0)
@@ -1281,12 +1284,12 @@ class AgentSharedEmbedding(nn.Module):
         message_lengths=find_lengths(message)
 
       prev_hidden = [torch.zeros((message.size(0),self.hidden_size)).to("cuda")]
-      prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers - 1)])
+      prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers_receiver - 1)])
 
-      prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers)]  # only used for LSTM
+      prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers_receiver)]  # only used for LSTM
 
       #inputs = self.embedding(message)
-      inputs = torch.nn.functional.embedding(message,weight=self.FC_vocabulary.weight)
+      inputs = F.embedding(message,weight=self.FC_vocabulary.weight)
 
       sequence = []
       logits = []
@@ -1296,7 +1299,7 @@ class AgentSharedEmbedding(nn.Module):
 
           input=inputs[:,step,:]
 
-          for i, layer in enumerate(self.cells):
+          for i, layer in enumerate(self.cells_receiver):
               if isinstance(layer, nn.LSTMCell):
                   h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
                   h_t = self.norm_h(h_t)
@@ -1309,7 +1312,7 @@ class AgentSharedEmbedding(nn.Module):
 
 
           #step_logits = F.log_softmax(self.agent_receiver(h_t,None), dim=1)
-          agent_output = self.FC_features(h_t.T, None).T
+          agent_output = F.log_softmax(F.linear(h_t,weight=self.FC_features.weight.T), dim=1)
           log = torch.zeros(agent_output.size(0)).to(agent_output.device)
           ent = log
 
@@ -1343,9 +1346,9 @@ class AgentSharedEmbedding(nn.Module):
     def imitate(self,x):
 
       prev_hidden = [self.FC_features(x)]
-      prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers - 1)])
+      prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers_sender - 1)])
 
-      prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers)]  # only used for LSTM
+      prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.num_layers_sender)]  # only used for LSTM
 
       input = torch.stack([self.sos_embedding] * x.size(0))
 
@@ -1354,7 +1357,7 @@ class AgentSharedEmbedding(nn.Module):
       entropy = []
 
       for step in range(self.max_len):
-          for i, layer in enumerate(self.cells):
+          for i, layer in enumerate(self._sender):
               if isinstance(layer, nn.LSTMCell):
                   h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
                   h_t = self.norm_h(h_t)
@@ -1380,7 +1383,8 @@ class AgentSharedEmbedding(nn.Module):
           logits.append(distr.probs)
 
 
-          input = torch.nn.functional.embedding(x,weight=self.FC_vocabulary.weight)
+          #input = F.embedding(x,weight=self.FC_vocabulary.weight)
+          input = self.embedding_speaker(x)
           sequence.append(x)
 
       sequence = torch.stack(sequence).permute(1, 0)

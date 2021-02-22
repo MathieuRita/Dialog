@@ -17,7 +17,7 @@ from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
 from src.core.util import dump_sender_receiver_impatient,levenshtein
 #Dialog
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
-from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedLSTM#,AgentSharedEmbedding
+from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedLSTM,AgentSharedEmbedding
 from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent,DialogReinforceModel6
 from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining_u,dump_sender_receiver_dialog_model_6
 from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
@@ -1347,26 +1347,28 @@ def main(params):
             "Agent 1"
 
 
-            agent_1=AgentSharedEmbedding(vocab_size=opts.vocab_size,
+            agent_1=AgentSharedEmbedding(n_features=opts.n_features,
+                                        vocab_size=opts.vocab_size,
                                         max_len=opts.max_len,
                                         embed_dim=opts.sender_embedding,
                                         hidden_size=opts.sender_hidden,
-                                        cell_sender=opts.cell_sender,
-                                        cell_receiver=opts.cell_receiver,
-                                        num_layers_sender=opts.num_layers_sender,
-                                        num_layers_receiver=opts.num_layers_receiver,
+                                        cell_sender=opts.sender_cell,
+                                        cell_receiver=opts.receiver_cell,
+                                        num_layers_sender=opts.sender_num_layers,
+                                        num_layers_receiver=opts.receiver_num_layers,
                                         force_eos=force_eos)
 
             "Agent 2"
 
-            agent_2=AgentSharedEmbedding(vocab_size=opts.vocab_size,
+            agent_2=AgentSharedEmbedding(n_features=opts.n_features,
+                                        vocab_size=opts.vocab_size,
                                         max_len=opts.max_len,
                                         embed_dim=opts.sender_embedding,
                                         hidden_size=opts.sender_hidden,
-                                        cell_sender=opts.cell_sender,
-                                        cell_receiver=opts.cell_receiver,
-                                        num_layers_sender=opts.num_layers_sender,
-                                        num_layers_receiver=opts.num_layers_receiver,
+                                        cell_sender=opts.sender_cell,
+                                        cell_receiver=opts.receiver_cell,
+                                        num_layers_sender=opts.sender_num_layers,
+                                        num_layers_receiver=opts.receiver_num_layers,
                                         force_eos=force_eos)
             if not opts.imitate:
                 game = DialogReinforceModel6(Agent_1=agent_1,
@@ -1497,7 +1499,7 @@ def main(params):
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
                 messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-            elif opts.model=="model_6":
+            elif opts.model=="shared_LSTM" or opts.model=="shared_embedding":
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
                 messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_6(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
@@ -1529,7 +1531,7 @@ def main(params):
             all_messages_2 = np.asarray(all_messages_2)
 
             if epoch%50==0:
-                if opts.model!="model_6":
+                if opts.model!="model_6" and opts.model!="shared_embedding":
                     torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
                     torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
                     torch.save(agent_2.sender.state_dict(), f"{opts.dir_save}/sender/agent_2_sender_weights_{epoch}.pth")

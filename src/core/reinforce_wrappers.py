@@ -1160,7 +1160,7 @@ class AgentSharedEmbedding(nn.Module):
     """
 
     def __init__(self,
-                n_features=,
+                n_features,
                 vocab_size,
                 max_len,
                 embed_dim,
@@ -1357,7 +1357,7 @@ class AgentSharedEmbedding(nn.Module):
       entropy = []
 
       for step in range(self.max_len):
-          for i, layer in enumerate(self._sender):
+          for i, layer in enumerate(self.cells_sender):
               if isinstance(layer, nn.LSTMCell):
                   h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
                   h_t = self.norm_h(h_t)

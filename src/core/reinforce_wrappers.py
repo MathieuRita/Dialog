@@ -915,6 +915,7 @@ class AgentBaseline2(nn.Module):
     """
 
     def __init__(self,
+                n_features,
                 vocab_size,
                 max_len,
                 embed_dim,

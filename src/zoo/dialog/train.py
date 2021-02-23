@@ -3,6 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
+from os import path
 import json
 import argparse
 import numpy as np
@@ -14,14 +16,17 @@ from src.zoo.dialog.features import OneHotLoader, UniformLoader
 from src.zoo.dialog.archs import Sender, Receiver
 from src.core.reinforce_wrappers import RnnReceiverImpatient
 from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce
-from src.core.util import dump_sender_receiver_impatient,levenshtein
+from src.core.util import dump_sender_receiver_impatient,levenshtein, convert_messages_to_numpy
 #Dialog
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
 from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3,AgentSharedLSTM,AgentSharedEmbedding
 from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent,DialogReinforceModel6
 from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining_u,dump_sender_receiver_dialog_model_6
-from src.core.trainers import TrainerDialog, TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
+from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
 
+# Propre
+from src.core.reinforce_wrappers import AgentBaseline2, DialogReinforce
+from src.core.trainers import TrainerDialog
 
 def get_params(params):
     parser = argparse.ArgumentParser()
@@ -103,6 +108,14 @@ def get_params(params):
     parser.add_argument('--imitate', type=bool, default=False,
                         help='Imitation')
 
+    # Propre
+    parser.add_argument('--loss_weights', type=dict, default={"self":1.,
+                                                              "cross":1.,
+                                                              "imitation":1.,
+                                                              "length_regularization":0.,
+                                                              "entropy_regularization":1.},
+                        help='Weights for losses')
+
     args = core.init(parser, params)
 
     return args
@@ -166,6 +179,50 @@ def loss_impatient(sender_input, _message, message_length, _receiver_input, rece
     loss= loss.sum(1)
 
     return loss, {'acc': acc}, crible_acc
+
+def loss_understanding(sender_input, receiver_output):
+    acc = (receiver_output.argmax(dim=1) == sender_input.argmax(dim=1)).detach().float()
+    loss = F.cross_entropy(receiver_output, sender_input.argmax(dim=1), reduction="none")
+    return loss, {'acc': acc}
+
+def loss_imitation(message,prob_reconstruction,message_lengths):
+
+    # 1. len_mask selects only the symbols before EOS-token
+    if message_lengths is not None:
+        to_onehot=torch.eye(message.size(1)).to("cuda")
+        to_onehot=torch.cat((to_onehot,torch.zeros((1,message.size(1))).to("cuda")),0)
+        len_mask=[]
+        for i in range(message_lengths.size(0)):
+          len_mask.append(to_onehot[message_lengths[i]])
+        len_mask=torch.stack(len_mask,dim=0)
+
+        len_mask=torch.cumsum(len_mask,dim=1)
+        len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
+
+    # Reconstruction task
+    prob_reconstruction = prob_reconstruction.transpose(1,2)
+    prob_reconstruction = prob_reconstruction.reshape((prob_reconstruction.size(0)*prob_reconstruction.size(1),prob_reconstruction.size(2)))
+    message = message.reshape((message.size(0)*message.size(1)))
+
+    acc_imitation = (prob_reconstruction.argmax(dim=1) == message).detach().float()
+    loss_imitation = F.cross_entropy(torch.log(prob_reconstruction), message, reduction="none")
+
+    loss_imitation = loss_imitation.reshape((loss.size(0),loss_imitation.size(0)//loss.size(0)))
+    acc_imitation = acc_imitation.reshape((acc.size(0),acc_imitation.size(0)//acc.size(0)))
+
+    if message_lengths is not None:
+
+      loss_imitation = (loss_imitation*len_mask)/(len_mask.sum(1).unsqueeze(1)) # Add EOS mask
+      acc_imitation = (acc_imitation*len_mask)/(len_mask.sum(1).unsqueeze(1))
+
+      loss_imitation=loss_imitation.sum(1)
+      acc_imitation=acc_imitation.sum(1)
+    else:
+      loss_imitation = loss_imitation.mean(dim=1)
+      acc_imitation = acc_imitation.mean(dim=1)
+
+    return loss_imitation, {'acc_imitation':acc_imitation}
+
 
 def loss_model_2(sender_input, _message, message_length, _receiver_input, receiver_output, output_lm, _labels):
 
@@ -932,7 +989,7 @@ def main(params):
             optimizer_2 = core.build_optimizer(list(game.agent_2.sender.parameters())+list(game.agent_1.receiver.parameters()))
 
 
-            trainer = TrainerDialog(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, train_data=train_loader,
+            trainer = TrainerDialogBaseline(game=game, optimizer_1=optimizer_1, optimizer_2=optimizer_2, train_data=train_loader,
                                             validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
         elif opts.model=="model_1":
@@ -1459,112 +1516,259 @@ def main(params):
 
 
 
+    if opts.model=="expe_1":
 
-    for epoch in range(int(opts.n_epochs)):
+        "Define agents"
 
-        print("Epoch: {}".format(epoch))
+        agent_1=AgentBaseline2(vocab_size=opts.vocab_size,
+                                max_len=opts.max_len,
+                                embed_dim=opts.sender_embedding,
+                                hidden_size=opts.sender_hidden,
+                                sender_cell=opts.sender_cell,
+                                receiver_cell=opts.receiver_cell,
+                                sender_num_layers=opts.sender_num_layers,
+                                receiver_num_layers=opts.receiver_num_layers,
+                                force_eos=force_eos)
 
-        trainer.train(n_epochs=1)
-        if opts.checkpoint_dir:
-            trainer.save_checkpoint(name=f'{opts.name}_vocab{opts.vocab_size}_rs{opts.random_seed}_lr{opts.lr}_shid{opts.sender_hidden}_rhid{opts.receiver_hidden}_sentr{opts.sender_entropy_coeff}_reg{opts.length_cost}_max_len{opts.max_len}')
+        agent_2=AgentBaseline2(vocab_size=opts.vocab_size,
+                                max_len=opts.max_len,
+                                embed_dim=opts.sender_embedding,
+                                hidden_size=opts.sender_hidden,
+                                sender_cell=opts.sender_cell,
+                                receiver_cell=opts.receiver_cell,
+                                sender_num_layers=opts.sender_num_layers,
+                                receiver_num_layers=opts.receiver_num_layers,
+                                force_eos=force_eos)
 
-        if not opts.dialog:
-            if not opts.impatient:
-                acc_vec_1,messages_1=dump(trainer.game, opts.n_features, device, False,epoch)
-            else:
-                acc_vec_1,messages_1=dump_impatient(trainer.game, opts.n_features, device, False,epoch)
+        "Define game"
 
-        else:
-            if opts.model=="baseline":
-                if epoch==0:
-                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-            elif opts.model=="model_1":
-                if epoch==0:
-                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-            elif opts.model=="model_2":
-                if epoch==0:
-                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_2(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-            elif opts.model=="model_3":
+        optim_params={"length_cost":0.,
+                      "sender_entropy_coeff_1":opts.sender_entropy_coeff_1,
+                      "receiver_entropy_coeff_1":opts.receiver_entropy_coeff_1,
+                      "sender_entropy_coeff_2":opts.sender_entropy_coeff_2,
+                      "receiver_entropy_coeff_2":opts.receiver_entropy_coeff_1}
+
+
+        game = DialogReinforce(Agent_1=agent_1,
+                                Agent_2=agent_2,
+                                loss_understanding=loss_understanding,
+                                loss_imitation=loss_imitation,
+                                optim_params=optim_params,
+                                loss_weights=opts.loss_weights,
+                                device=device)
+
+        "Create optimizers"
+        optimizer = core.build_optimizer(list(game.parameters()))
+
+        "Create trainer"
+        trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
+                                validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+        "Prepare training"
+
+        # Create save dir
+        if not path.exists(opts.dir_save):
+            os.system("mkdir {}".format(opts.dir_save))
+            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy".format(opts.dir_save))
+
+        # Main losses
+        training_loss=[]
+        eval_loss=[]
+        training_loss_12=[]
+        eval_loss_12=[]
+        training_loss_21=[]
+        eval_loss_21=[]
+
+        # Specific losses
+        training_loss_self_11=[]
+        training_loss_cross_12=[]
+        training_loss_imitation_12=[]
+        training_loss_self_22=[]
+        training_loss_cross_21=[]
+        training_loss_imitation_21=[]
+        eval_loss_self_11=[]
+        eval_loss_cross_12=[]
+        eval_loss_imitation_12=[]
+        eval_loss_self_22=[]
+        eval_loss_cross_21=[]
+        eval_loss_imitation_21=[]
+
+        "Train"
+
+        for epoch in range(int(opts.n_epochs)):
+
+            print("Epoch: {}".format(epoch))
+
+                # Train
+                list_train_loss,list_train_rest = trainer.train(n_epochs=1)
+
+                # Eval
+                eval_loss,eval_rest = trainer.eval()
+
+                # Store results
+                training_loss.append(list_train_loss[-1])
+                eval_loss.append(eval_loss[-1])
+                training_loss_12.append(list_train_rest[-1]["loss_1"])
+                eval_loss_12.append(eval_rest["loss_1"])
+                training_loss_21.append(list_train_rest[-1]["loss_2"])
+                eval_loss_21.append(eval_rest["loss_2"])
+                training_loss_self_11.append(list_train_rest[-1]["loss_self_12"])
+                training_loss_cross_12.append(list_train_rest[-1]["loss_cross_12"])
+                training_loss_imitation_12.append(list_train_rest["loss_imitation_12"])
+                training_loss_self_22.append(list_train_rest[-1]["loss_self_21"])
+                training_loss_cross_21.append(list_train_rest[-1]["loss_self_21"])
+                training_loss_imitation_21.append(list_train_rest[-1]["loss_self_21"])
+                eval_loss_self_11.append(eval_rest["loss_self_12"])
+                eval_loss_cross_12.append(eval_rest["loss_cross_12"])
+                eval_loss_imitation_12.append(eval_rest["loss_imitation_12"])
+                eval_loss_self_22.append(eval_rest["loss_self_21"])
+                eval_loss_cross_21.append(eval_rest["loss_cross_21"])
+                eval_loss_imitation_21.append(eval_rest["loss_imitation_21"])
+
                 if epoch==0:
                     messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
                 acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-            elif opts.model=="model_4":
-                if epoch==0:
-                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-            elif opts.model=="model_5":
-                if epoch==0:
-                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-            elif opts.model=="shared_LSTM" or opts.model=="shared_embedding":
-                if epoch==0:
-                    messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-                messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_6(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-            elif opts.model=="pretraining":
-                acc_vec_1, messages_1 = dump_pretraining(trainer.game, opts.n_features,pretrained_messages, device, False,epoch)
+                messages_1 = convert_messages_to_numpy(messages_1)
+                messages_2 = convert_messages_to_numpy(messages_2)
+
+                # Save models
+                if epoch%20==0:
+                    torch.save(agent_1.state_dict(), f"{opts.dir_save}/models/agent_1_weights_{epoch}.pth")
+                    torch.save(agent_2.state_dict(), f"{opts.dir_save}/models/agent_2_weights_{epoch}.pth")
+
+                # Save training info
+                if epoch%10:
+                    np.save(opts.dir_save+'/training_info/training_loss_{}.npy'.format(epoch), training_loss)
+                    np.save(opts.dir_save+'/training_info/eval_loss_{}.npy'.format(epoch), eval_loss)
+                    np.save(opts.dir_save+'/training_info/training_loss_12_{}.npy'.format(epoch), training_loss_12)
+                    np.save(opts.dir_save+'/training_info/eval_loss_12_{}.npy'.format(epoch), eval_loss_12)
+                    np.save(opts.dir_save+'/training_info/training_loss_21_{}.npy'.format(epoch), training_loss_21)
+                    np.save(opts.dir_save+'/training_info/eval_loss_21_{}.npy'.format(epoch), eval_loss_21)
+                    np.save(opts.dir_save+'/training_info/training_loss_self_11_{}.npy'.format(epoch), training_loss_self_11)
+                    np.save(opts.dir_save+'/training_info/training_loss_cross_12_{}.npy'.format(epoch), training_loss_cross_12)
+                    np.save(opts.dir_save+'/training_info/training_loss_imitation_12_{}.npy'.format(epoch), training_loss_imitation_12)
+                    np.save(opts.dir_save+'/training_info/training_loss_self_22_{}.npy'.format(epoch), training_loss_self_22)
+                    np.save(opts.dir_save+'/training_info/training_loss_cross_21_{}.npy'.format(epoch), training_loss_cross_21)
+                    np.save(opts.dir_save+'/training_info/training_loss_imitation_21_{}.npy'.format(epoch), training_loss_imitation_21)
+                    np.save(opts.dir_save+'/training_info/eval_loss_self_11_{}.npy'.format(epoch), eval_loss_self_11)
+                    np.save(opts.dir_save+'/training_info/eval_loss_cross_12_{}.npy'.format(epoch), eval_loss_cross_12)
+                    np.save(opts.dir_save+'/training_info/eval_loss_imitation_12_{}.npy'.format(epoch), eval_loss_imitation_12)
+                    np.save(opts.dir_save+'/training_info/eval_loss_self_22_{}.npy'.format(epoch), eval_loss_self_22)
+                    np.save(opts.dir_save+'/training_info/eval_loss_cross_21_{}.npy'.format(epoch), eval_loss_cross_21)
+                    np.save(opts.dir_save+'/training_info/eval_loss_imitation_21_{}.npy'.format(epoch), eval_loss_imitation_21)
+
+                # Save accuracy/message results
+                np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
+                np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
+                np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages_1)
+                np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec_1)
 
 
-        if opts.dialog and opts.model!="pretraining":
+    else:
 
-            if opts.entropy_scheduling:
-                if opts.model!="baseline":
-                    game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_11)**10)
-                    game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_22)**10)
+        for epoch in range(int(opts.n_epochs)):
+            trainer.train(n_epochs=1)
+
+            if opts.checkpoint_dir:
+                trainer.save_checkpoint(name=f'{opts.name}_vocab{opts.vocab_size}_rs{opts.random_seed}_lr{opts.lr}_shid{opts.sender_hidden}_rhid{opts.receiver_hidden}_sentr{opts.sender_entropy_coeff}_reg{opts.length_cost}_max_len{opts.max_len}')
+
+            if not opts.dialog:
+                if not opts.impatient:
+                    acc_vec_1,messages_1=dump(trainer.game, opts.n_features, device, False,epoch)
                 else:
-                    game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_1)**10)
-                    game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_2)**10)
+                    acc_vec_1,messages_1=dump_impatient(trainer.game, opts.n_features, device, False,epoch)
 
-            # Convert to numpy to save messages
-            all_messages_1=[]
-            for x in messages_1:
-                x = x.cpu().numpy()
-                all_messages_1.append(x)
-            all_messages_1 = np.asarray(all_messages_1)
+            else:
+                if opts.model=="baseline":
+                    if epoch==0:
+                        messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                    messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                elif opts.model=="model_1":
+                    if epoch==0:
+                        messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                    messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                elif opts.model=="model_2":
+                    if epoch==0:
+                        messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                    acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog_model_2(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                elif opts.model=="model_3":
+                    if epoch==0:
+                        messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                    acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                elif opts.model=="model_4":
+                    if epoch==0:
+                        messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                    messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                elif opts.model=="model_5":
+                    if epoch==0:
+                        messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                    messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_1(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                elif opts.model=="shared_LSTM" or opts.model=="shared_embedding":
+                    if epoch==0:
+                        messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+                    messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_6(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+                elif opts.model=="pretraining":
+                    acc_vec_1, messages_1 = dump_pretraining(trainer.game, opts.n_features,pretrained_messages, device, False,epoch)
 
-            all_messages_2=[]
-            for x in messages_2:
-                x = x.cpu().numpy()
-                all_messages_2.append(x)
-            all_messages_2 = np.asarray(all_messages_2)
 
-            if epoch%50==0:
-                if opts.model!="model_6" and opts.model!="shared_embedding":
+            if opts.dialog and opts.model!="pretraining":
+
+                if opts.entropy_scheduling:
+                    if opts.model!="baseline":
+                        game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_11)**10)
+                        game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_22)**10)
+                    else:
+                        game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_1)**10)
+                        game.sender_entropy_coeff_2=0.5*(1-np.mean(acc_vec_2)**10)
+
+                # Convert to numpy to save messages
+                all_messages_1=[]
+                for x in messages_1:
+                    x = x.cpu().numpy()
+                    all_messages_1.append(x)
+                all_messages_1 = np.asarray(all_messages_1)
+
+                all_messages_2=[]
+                for x in messages_2:
+                    x = x.cpu().numpy()
+                    all_messages_2.append(x)
+                all_messages_2 = np.asarray(all_messages_2)
+
+                if epoch%50==0:
+                    if opts.model!="model_6" and opts.model!="shared_embedding":
+                        torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
+                        torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
+                        torch.save(agent_2.sender.state_dict(), f"{opts.dir_save}/sender/agent_2_sender_weights_{epoch}.pth")
+                        torch.save(agent_2.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_2_receiver_weights_{epoch}.pth")
+                    else:
+                        torch.save(agent_1.state_dict(), f"{opts.dir_save}/sender/agent_1_weights_{epoch}.pth")
+                        torch.save(agent_2.state_dict(), f"{opts.dir_save}/sender/agent_2_weights_{epoch}.pth")
+
+                np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
+                np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
+                np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages_2)
+                np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec_2)
+                np.save(opts.dir_save+'/accuracy/agent_1_1_accuracy_{}.npy'.format(epoch), acc_vec_11)
+                np.save(opts.dir_save+'/accuracy/agent_2_2_accuracy_{}.npy'.format(epoch), acc_vec_22)
+
+            else:
+
+                if opts.entropy_scheduling:
+                    game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_1))
+
+                # Convert to numpy to save messages
+                all_messages_1=[]
+                for x in messages_1:
+                    x = x.cpu().numpy()
+                    all_messages_1.append(x)
+                all_messages_1 = np.asarray(all_messages_1)
+
+                if epoch%10==0:
                     torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
                     torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
-                    torch.save(agent_2.sender.state_dict(), f"{opts.dir_save}/sender/agent_2_sender_weights_{epoch}.pth")
-                    torch.save(agent_2.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_2_receiver_weights_{epoch}.pth")
-                else:
-                    torch.save(agent_1.state_dict(), f"{opts.dir_save}/sender/agent_1_weights_{epoch}.pth")
-                    torch.save(agent_2.state_dict(), f"{opts.dir_save}/sender/agent_2_weights_{epoch}.pth")
 
-            np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
-            np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
-            np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages_2)
-            np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec_2)
-            np.save(opts.dir_save+'/accuracy/agent_1_1_accuracy_{}.npy'.format(epoch), acc_vec_11)
-            np.save(opts.dir_save+'/accuracy/agent_2_2_accuracy_{}.npy'.format(epoch), acc_vec_22)
-
-        else:
-
-            if opts.entropy_scheduling:
-                game.sender_entropy_coeff_1=0.5*(1-np.mean(acc_vec_1))
-
-            # Convert to numpy to save messages
-            all_messages_1=[]
-            for x in messages_1:
-                x = x.cpu().numpy()
-                all_messages_1.append(x)
-            all_messages_1 = np.asarray(all_messages_1)
-
-            if epoch%10==0:
-                torch.save(agent_1.sender.state_dict(), f"{opts.dir_save}/sender/agent_1_sender_weights_{epoch}.pth")
-                torch.save(agent_1.receiver.state_dict(), f"{opts.dir_save}/receiver/agent_1_receiver_weights_{epoch}.pth")
-
-            np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
-            np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
+                np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
+                np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
 
 
     core.close()

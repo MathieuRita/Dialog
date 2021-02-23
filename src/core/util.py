@@ -512,6 +512,15 @@ def levenshtein(s1, s2):
                 m[i, j] = min(m[i-1, j]+1, m[i, j-1]+1, m[i-1, j-1]+1)
     return m[len(s1), len(s2)]
 
+def convert_messages_to_numpy(messages):
+    all_messages=[]
+    for x in messages:
+        x = x.cpu().numpy()
+        all_messages.append(x)
+    all_messages = np.asarray(all_messages)
+
+    return all_messages
+
 def dump_test_position(game: torch.nn.Module,
                               dataset: 'torch.utils.data.DataLoader',
                               position: int,

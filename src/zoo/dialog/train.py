@@ -113,7 +113,7 @@ def get_params(params):
     parser.add_argument('--self_weight', type=float, default=1.,help='Weight for self')
     parser.add_argument('--cross_weight', type=float, default=1.,help='Weight for cross')
     parser.add_argument('--imitation_weight', type=float, default=1.,help='Weight for imitation')
-    parser.add_argument('--optim_mode', type=string, default="cross",help='Choice for losses')
+    parser.add_argument('--optim_mode', type=str, default="cross",help='Choice for losses')
 
     args = core.init(parser, params)
 

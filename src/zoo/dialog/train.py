@@ -113,6 +113,7 @@ def get_params(params):
     parser.add_argument('--self_weight', type=float, default=1.,help='Weight for self')
     parser.add_argument('--cross_weight', type=float, default=1.,help='Weight for cross')
     parser.add_argument('--imitation_weight', type=float, default=1.,help='Weight for imitation')
+    parser.add_argument('--optim_mode', type=string, default="cross",help='Choice for losses')
 
     args = core.init(parser, params)
 
@@ -1549,10 +1550,12 @@ def main(params):
                       "sender_entropy_coeff_2":opts.sender_entropy_coeff,
                       "receiver_entropy_coeff_2":opts.receiver_entropy_coeff}
 
-        if opts.imitate:
-            loss_weights={"self":1.,"cross":1.,"imitation":1.}
-        else:
+        if opts.optim_mode=="cross":
+            loss_weights={"self":0.,"cross":1.,"imitation":0.}
+        elif opts.optim_mode=="cross+self":
             loss_weights={"self":1.,"cross":1.,"imitation":0.}
+        else:
+            loss_weights={"self":1.,"cross":1.,"imitation":1.}
         #loss_weights={"self":opts.self_weight,"cross":opts.cross_weight,"imitation":opts.imitation_weight}
 
         game = DialogReinforce(Agent_1=agent_1,

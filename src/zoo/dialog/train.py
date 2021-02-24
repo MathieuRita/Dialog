@@ -1641,8 +1641,8 @@ def main(params):
             np_messages_1 = convert_messages_to_numpy(messages_1)
             np_messages_2 = convert_messages_to_numpy(messages_2)
 
-            game.optim_params["sender_entropy_coeff_1"]=0.5-0.4*np.mean(acc_vec_11)
-            game.optim_params["sender_entropy_coeff_2"]=0.5-0.4*np.mean(acc_vec_22)
+            game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
+            game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
 
 
             # Save models

@@ -1712,12 +1712,19 @@ class DialogReinforce(nn.Module):
         receiver_output_self, log_prob_r_self, entropy_r_self = agent_sender.receive(message, receiver_input, message_lengths)
         # Imitation
         #candidates_cross=receiver_output_cross.argmax(dim=1)
+        #message_reconstruction, prob_reconstruction, _ = agent_receiver.imitate(sender_input)
+        message_to_imitate, _, _ = agent_receiver.send(sender_input,eval=True)
+        message_to_imitate_lengths = find_lengths(message_to_imitate)
+        send_output, _, _ = agent_sender.receive(message_to_imitate, receiver_input, message_to_imitate_lengths)
         message_reconstruction, prob_reconstruction, _ = agent_sender.imitate(sender_input)
 
         "2. Losses computation"
         loss_self, rest_self = self.loss_understanding(sender_input,receiver_output_self)
         loss_cross, rest_cross = self.loss_understanding(sender_input,receiver_output_cross)
-        loss_imitation, rest_imitation = self.loss_message_imitation(message,prob_reconstruction,message_lengths)
+        #loss_imitation, rest_imitation = self.loss_message_imitation(message,prob_reconstruction,message_lengths)
+        loss_imitation, rest_imitation = self.loss_message_imitation(message_to_imitate,prob_reconstruction,message_to_imitate_lengths)
+        _, rest_und_cross = self.loss_understanding(sender_input,send_output)
+        loss_imitation=loss_imitation*rest_und_cross["acc"]
 
         # Average loss. Rk. Sortir loss_imitation de cette somme
         loss = self.loss_weights["self"]*loss_self + self.loss_weights["cross"]*loss_cross + self.loss_weights["imitation"]*loss_imitation

@@ -1560,17 +1560,17 @@ def main(params):
                                 device=device)
 
         "Create optimizers"
-        optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
-        optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
-        optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
-        optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
-        #optimizer = core.build_optimizer(list(game.parameters()))
+        #optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
+        #optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
+        #optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
+        #optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
+        optimizer = core.build_optimizer(list(game.parameters()))
 
         "Create trainer"
-        #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
-        #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
-        trainer = TrainerDialog(game=game, optimizer_sender_1=optimizer_sender_1,optimizer_sender_1=optimizer_receiver_1,optimizer_sender_2=optimizer_sender_2,optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
+        trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
                                 validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+        #trainer = TrainerDialog(game=game, optimizer_sender_1=optimizer_sender_1,optimizer_receiver_1=optimizer_receiver_1,optimizer_sender_2=optimizer_sender_2,optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
+        #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
         "Prepare training"
 

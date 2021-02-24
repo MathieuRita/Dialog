@@ -407,11 +407,7 @@ class TrainerDialog:
         :param callbacks: A list of egg.core.Callback objects that can encapsulate monitoring or checkpointing
         """
         self.game = game
-        #self.optimizer = optimizer
-        self.optimizer_sender_1 = optimizer_sender_1
-        self.optimizer_sender_2 = optimizer_sender_2
-        self.optimizer_receiver_1 = optimizer_receiver_1
-        self.optimizer_receiver_2 = optimizer_receiver_2
+        self.optimizer = optimizer
         self.train_data = train_data
         self.validation_data = validation_data
         common_opts = get_opts()
@@ -422,11 +418,7 @@ class TrainerDialog:
         # since model is placed on GPU within Trainer, this leads to having optimizer's state and model parameters
         # on different devices. Here, we protect from that by moving optimizer's internal state to the proper device
 
-        #self.optimizer.state = move_to(self.optimizer.state, self.device)
-        self.optimizer_sender_1.state = move_to(self.optimizer_sender_1.state, self.device)
-        self.optimizer_sender_2.state = move_to(self.optimizer_sender_2.state, self.device)
-        self.optimizer_receiver_1.state = move_to(self.optimizer_receiver_1.state, self.device)
-        self.optimizer_receiver_2.state = move_to(self.optimizer_receiver_2.state, self.device)
+        self.optimizer.state = move_to(self.optimizer.state, self.device)
         self.should_stop = False
         self.start_epoch = 0  # Can be overwritten by checkpoint loader
         self.callbacks = callbacks
@@ -500,15 +492,10 @@ class TrainerDialog:
             batch = move_to(batch, self.device)
             mean_rest = _add_dicts_2(mean_rest, rest)
 
-            self.optimizer_sender_1.zero_grad()
-            self.optimizer_sender_2.zero_grad()
-            self.optimizer_receiver_1.zero_grad()
-            self.optimizer_receiver_2.zero_grad()
+            self.optimizer.zero_grad()
             optimized_loss.backward()
-            self.optimizer_sender_1.step()
-            self.optimizer_sender_2.step()
-            self.optimizer_receiver_1.step()
-            self.optimizer_receiver_2.step()
+            self.optimizer.step()
+
 
             n_batches += 1
             mean_loss += optimized_loss

@@ -183,7 +183,7 @@ def loss_understanding(sender_input, receiver_output):
     loss = F.cross_entropy(receiver_output, sender_input.argmax(dim=1), reduction="none")
     return loss, {'acc': acc}
 
-def loss_imitation(message,prob_reconstruction,message_lengths):
+def loss_message_imitation(message,prob_reconstruction,message_lengths):
 
     # 1. len_mask selects only the symbols before EOS-token
     if message_lengths is not None:
@@ -198,6 +198,7 @@ def loss_imitation(message,prob_reconstruction,message_lengths):
         len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
 
     # Reconstruction task
+    batch_size=message.size(0)
     prob_reconstruction = prob_reconstruction.transpose(1,2)
     prob_reconstruction = prob_reconstruction.reshape((prob_reconstruction.size(0)*prob_reconstruction.size(1),prob_reconstruction.size(2)))
     message = message.reshape((message.size(0)*message.size(1)))
@@ -205,8 +206,8 @@ def loss_imitation(message,prob_reconstruction,message_lengths):
     acc_imitation = (prob_reconstruction.argmax(dim=1) == message).detach().float()
     loss_imitation = F.cross_entropy(torch.log(prob_reconstruction), message, reduction="none")
 
-    loss_imitation = loss_imitation.reshape((loss.size(0),loss_imitation.size(0)//loss.size(0)))
-    acc_imitation = acc_imitation.reshape((acc.size(0),acc_imitation.size(0)//acc.size(0)))
+    loss_imitation = loss_imitation.reshape((batch_size,loss_imitation.size(0)//batch_size))
+    acc_imitation = acc_imitation.reshape((batch_size,acc_imitation.size(0)//batch_size))
 
     if message_lengths is not None:
 
@@ -1553,7 +1554,7 @@ def main(params):
         game = DialogReinforce(Agent_1=agent_1,
                                 Agent_2=agent_2,
                                 loss_understanding=loss_understanding,
-                                loss_imitation=loss_imitation,
+                                loss_imitation=loss_message_imitation,
                                 optim_params=optim_params,
                                 loss_weights=loss_weights,
                                 device=device)
@@ -1570,11 +1571,11 @@ def main(params):
         # Create save dir
         if not path.exists(opts.dir_save):
             os.system("mkdir {}".format(opts.dir_save))
-            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy".format(opts.dir_save))
+            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
 
         # Main losses
-        training_loss=[]
-        eval_loss=[]
+        training_losses=[]
+        eval_losses=[]
         training_loss_12=[]
         eval_loss_12=[]
         training_loss_21=[]
@@ -1607,30 +1608,30 @@ def main(params):
             eval_loss,eval_rest = trainer.eval()
 
             # Store results
-            training_loss.append(list_train_loss[-1])
-            eval_loss.append(eval_loss[-1])
+            training_losses.append(list_train_loss[-1])
+            eval_losses.append(eval_loss)
             training_loss_12.append(list_train_rest[-1]["loss_1"])
             eval_loss_12.append(eval_rest["loss_1"])
             training_loss_21.append(list_train_rest[-1]["loss_2"])
             eval_loss_21.append(eval_rest["loss_2"])
-            training_loss_self_11.append(list_train_rest[-1]["loss_self_12"])
+            training_loss_self_11.append(list_train_rest[-1]["loss_self_11"])
             training_loss_cross_12.append(list_train_rest[-1]["loss_cross_12"])
-            training_loss_imitation_12.append(list_train_rest["loss_imitation_12"])
-            training_loss_self_22.append(list_train_rest[-1]["loss_self_21"])
-            training_loss_cross_21.append(list_train_rest[-1]["loss_self_21"])
-            training_loss_imitation_21.append(list_train_rest[-1]["loss_self_21"])
-            eval_loss_self_11.append(eval_rest["loss_self_12"])
+            training_loss_imitation_12.append(list_train_rest[-1]["loss_imitation_12"])
+            training_loss_self_22.append(list_train_rest[-1]["loss_self_22"])
+            training_loss_cross_21.append(list_train_rest[-1]["loss_cross_21"])
+            training_loss_imitation_21.append(list_train_rest[-1]["loss_imitation_21"])
+            eval_loss_self_11.append(eval_rest["loss_self_11"])
             eval_loss_cross_12.append(eval_rest["loss_cross_12"])
             eval_loss_imitation_12.append(eval_rest["loss_imitation_12"])
-            eval_loss_self_22.append(eval_rest["loss_self_21"])
+            eval_loss_self_22.append(eval_rest["loss_self_22"])
             eval_loss_cross_21.append(eval_rest["loss_cross_21"])
             eval_loss_imitation_21.append(eval_rest["loss_imitation_21"])
 
             if epoch==0:
                 messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-            acc_vec_1, messages_1, acc_vec_2, messages_2 = dump_dialog(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-            messages_1 = convert_messages_to_numpy(messages_1)
-            messages_2 = convert_messages_to_numpy(messages_2)
+            messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_6(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+            np_messages_1 = convert_messages_to_numpy(messages_1)
+            np_messages_2 = convert_messages_to_numpy(messages_2)
 
             # Save models
             if epoch%20==0:
@@ -1638,9 +1639,9 @@ def main(params):
                 torch.save(agent_2.state_dict(), f"{opts.dir_save}/models/agent_2_weights_{epoch}.pth")
 
             # Save training info
-            if epoch%10:
-                np.save(opts.dir_save+'/training_info/training_loss_{}.npy'.format(epoch), training_loss)
-                np.save(opts.dir_save+'/training_info/eval_loss_{}.npy'.format(epoch), eval_loss)
+            if epoch%10==0:
+                np.save(opts.dir_save+'/training_info/training_loss_{}.npy'.format(epoch), training_losses)
+                np.save(opts.dir_save+'/training_info/eval_loss_{}.npy'.format(epoch), eval_losses)
                 np.save(opts.dir_save+'/training_info/training_loss_12_{}.npy'.format(epoch), training_loss_12)
                 np.save(opts.dir_save+'/training_info/eval_loss_12_{}.npy'.format(epoch), eval_loss_12)
                 np.save(opts.dir_save+'/training_info/training_loss_21_{}.npy'.format(epoch), training_loss_21)
@@ -1659,10 +1660,12 @@ def main(params):
                 np.save(opts.dir_save+'/training_info/eval_loss_imitation_21_{}.npy'.format(epoch), eval_loss_imitation_21)
 
             # Save accuracy/message results
-            np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), all_messages_1)
-            np.save(opts.dir_save+'/accuracy/agent_1_accuracy_{}.npy'.format(epoch), acc_vec_1)
-            np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), all_messages_1)
-            np.save(opts.dir_save+'/accuracy/agent_2_accuracy_{}.npy'.format(epoch), acc_vec_1)
+            np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), np_messages_1)
+            np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), np_messages_2)
+            np.save(opts.dir_save+'/accuracy/12_accuracy_{}.npy'.format(epoch), acc_vec_1)
+            np.save(opts.dir_save+'/accuracy/21_accuracy_{}.npy'.format(epoch), acc_vec_2)
+            np.save(opts.dir_save+'/accuracy/11_accuracy_{}.npy'.format(epoch), acc_vec_11)
+            np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
 
 
     else:

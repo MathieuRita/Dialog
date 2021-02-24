@@ -693,7 +693,7 @@ def dump_dialog_model_6(game, n_features, device, gs_mode, epoch,past_messages_1
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%20==0:
+        if epoch%100==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
@@ -718,7 +718,7 @@ def dump_dialog_model_6(game, n_features, device, gs_mode, epoch,past_messages_1
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%20==0:
+        if epoch%100==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
@@ -744,7 +744,7 @@ def dump_dialog_model_6(game, n_features, device, gs_mode, epoch,past_messages_1
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%20==0:
+        if epoch%100==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
@@ -768,7 +768,7 @@ def dump_dialog_model_6(game, n_features, device, gs_mode, epoch,past_messages_1
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%20==0:
+        if epoch%100==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
@@ -1616,6 +1616,8 @@ def main(params):
 
             # Train
             list_train_loss,list_train_rest = trainer.train(n_epochs=1)
+
+            print(list_train_rest[-1],flush=True)
 
             # Eval
             eval_loss,eval_rest = trainer.eval()

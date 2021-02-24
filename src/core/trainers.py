@@ -386,11 +386,7 @@ class TrainerDialog:
     def __init__(
             self,
             game: torch.nn.Module,
-            #optimizer: torch.optim.Optimizer,
-            optimizer_sender_1: torch.optim.Optimizer,
-            optimizer_receiver_1: torch.optim.Optimizer,
-            optimizer_sender_2: torch.optim.Optimizer,
-            optimizer_receiver_2: torch.optim.Optimizer,
+            optimizer: torch.optim.Optimizer,
             train_data: DataLoader,
             validation_data: Optional[DataLoader] = None,
             device: torch.device = None,

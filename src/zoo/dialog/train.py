@@ -1549,7 +1549,11 @@ def main(params):
                       "sender_entropy_coeff_2":opts.sender_entropy_coeff,
                       "receiver_entropy_coeff_2":opts.receiver_entropy_coeff}
 
-        loss_weights={"self":opts.self_weight,"cross":opts.cross_weight,"imitation":opts.imitation_weight}
+        if opts.imitate:
+            loss_weights={"self":1.,"cross":1.,"imitation":1.}
+        else:
+            loss_weights={"self":1.,"cross":1.,"imitation":0.}
+        #loss_weights={"self":opts.self_weight,"cross":opts.cross_weight,"imitation":opts.imitation_weight}
 
         game = DialogReinforce(Agent_1=agent_1,
                                 Agent_2=agent_2,

@@ -1576,6 +1576,7 @@ def main(params):
         # Main losses
         training_losses=[]
         eval_losses=[]
+        training_entropy=[]
         training_loss_12=[]
         eval_loss_12=[]
         training_loss_21=[]
@@ -1610,6 +1611,8 @@ def main(params):
             # Store results
             training_losses.append(list_train_loss[-1])
             eval_losses.append(eval_loss)
+            training_entropy_1.append(list_train_rest[-1]["sender_entropy_1"])
+            training_entropy_2.append(list_train_rest[-1]["sender_entropy_2"])
             training_loss_12.append(list_train_rest[-1]["loss_1"])
             eval_loss_12.append(eval_rest["loss_1"])
             training_loss_21.append(list_train_rest[-1]["loss_2"])
@@ -1642,6 +1645,8 @@ def main(params):
             if epoch%10==0:
                 np.save(opts.dir_save+'/training_info/training_loss_{}.npy'.format(epoch), training_losses)
                 np.save(opts.dir_save+'/training_info/eval_loss_{}.npy'.format(epoch), eval_losses)
+                np.save(opts.dir_save+'/training_info/training_entropy_1_{}.npy'.format(epoch), training_entropy_1)
+                np.save(opts.dir_save+'/training_info/training_entropy_2_{}.npy'.format(epoch), training_entropy_2)
                 np.save(opts.dir_save+'/training_info/training_loss_12_{}.npy'.format(epoch), training_loss_12)
                 np.save(opts.dir_save+'/training_info/eval_loss_12_{}.npy'.format(epoch), eval_loss_12)
                 np.save(opts.dir_save+'/training_info/training_loss_21_{}.npy'.format(epoch), training_loss_21)

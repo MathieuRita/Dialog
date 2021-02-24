@@ -137,8 +137,11 @@ def get_opts() -> argparse.Namespace:
     return common_opts
 
 
-def build_optimizer(params: Iterable) -> torch.optim.Optimizer:
-    return optimizer(params, lr=get_opts().lr)
+def build_optimizer(params: Iterable, lr=None) -> torch.optim.Optimizer:
+    if lr is None:
+        return optimizer(params, lr=get_opts().lr)
+    else:
+        return optimizer(params, lr=lr)
 
 
 def get_summary_writer() -> 'torch.utils.SummaryWriter':

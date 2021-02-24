@@ -1136,7 +1136,7 @@ class AgentBaseline2(nn.Module):
           else:
               x = step_logits.argmax(dim=1)
 
-          logits.append(distr.probs)
+              logits.append(distr.probs)
 
 
           input = self.sender_embedding(x)
@@ -1712,14 +1712,12 @@ class DialogReinforce(nn.Module):
         receiver_output_self, log_prob_r_self, entropy_r_self = agent_sender.receive(message, receiver_input, message_lengths)
         # Imitation
         #candidates_cross=receiver_output_cross.argmax(dim=1)
-        message_to_imitate, _, _ = agent_receiver.send(sender_input,eval=True)
-        message_to_imitate_lengths = find_lengths(message_to_imitate)
         message_reconstruction, prob_reconstruction, _ = agent_sender.imitate(sender_input)
 
         "2. Losses computation"
         loss_self, rest_self = self.loss_understanding(sender_input,receiver_output_self)
         loss_cross, rest_cross = self.loss_understanding(sender_input,receiver_output_cross)
-        loss_imitation, rest_imitation = self.loss_message_imitation(message_to_imitate,prob_reconstruction,message_to_imitate_lengths)
+        loss_imitation, rest_imitation = self.loss_message_imitation(message,prob_reconstruction,message_lengths)
 
         # Average loss. Rk. Sortir loss_imitation de cette somme
         loss = self.loss_weights["self"]*loss_self + self.loss_weights["cross"]*loss_cross + self.loss_weights["imitation"]*loss_imitation
@@ -1749,17 +1747,24 @@ class DialogReinforce(nn.Module):
 
         "4. Variance reduction"
 
-        policy_loss = ((loss.detach() - self.mean_baseline['loss_{}'.format(sender_id)]) * log_prob).mean()
+        policy_loss_self = ((loss_self.detach() - self.mean_baseline['loss_self_{}'.format(sender_id)]) * log_prob).mean()
+        policy_loss_cross = ((loss_cross.detach() - self.mean_baseline['loss_cross_{}'.format(sender_id)]) * log_prob).mean()
+        policy_loss_imitation = ((loss_imitation.detach() - self.mean_baseline['loss_imitation_{}'.format(sender_id)]) * log_prob).mean()
         policy_length_loss = ((length_loss.float() - self.mean_baseline['length_{}'.format(sender_id)]) * effective_log_prob_s).mean()
 
         " 5. Final loss"
+        policy_loss = self.loss_weights["self"]*policy_loss_self + self.loss_weights["cross"]*policy_loss_cross + self.loss_weights["imitation"]*policy_loss_imitation
+        policy_loss /= (self.loss_weights["self"]+self.loss_weights["cross"]+self.loss_weights["imitation"])
+
         optimized_loss = policy_length_loss + policy_loss - weighted_entropy
 
         # if the receiver is deterministic/differentiable, we apply the actual loss
         optimized_loss += loss.mean()
 
         if self.training:
-            self.update_baseline('loss_{}'.format(sender_id), loss)
+            self.update_baseline('loss_self_{}'.format(sender_id), loss_self)
+            self.update_baseline('loss_cross_{}'.format(sender_id), loss_cross)
+            self.update_baseline('loss_imitate_{}'.format(sender_id), loss_imitate)
             self.update_baseline('length_{}'.format(sender_id), length_loss)
 
         "6. Store results"

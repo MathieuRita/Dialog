@@ -1560,17 +1560,15 @@ def main(params):
                                 device=device)
 
         "Create optimizers"
-        #optimizer_sender_1 = core.build_optimizer(list(game.agent_1.sender.parameters()))
-        #optimizer_receiver_1 = core.build_optimizer(list(game.agent_1.receiver.parameters()))
-        #optimizer_sender_2 = core.build_optimizer(list(game.agent_2.sender.parameters()))
-        #optimizer_receiver_2 = core.build_optimizer(list(game.agent_2.receiver.parameters()))
-        optimizer = core.build_optimizer(list(game.parameters()))
+        optimizer_agent_1 = core.build_optimizer(list(game.agent_1.parameters()))
+        optimizer_agent_2 = core.build_optimizer(list(game.agent_2.parameters()))
+        #optimizer = core.build_optimizer(list(game.parameters()))
 
         "Create trainer"
-        trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
-                                validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
-        #trainer = TrainerDialog(game=game, optimizer_sender_1=optimizer_sender_1,optimizer_receiver_1=optimizer_receiver_1,optimizer_sender_2=optimizer_sender_2,optimizer_receiver_2=optimizer_receiver_2, train_data=train_loader, \
+        #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
         #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+        trainer = TrainerDialog(game=game, optimizer_agent_1=optimizer_agent_1,optimizer_agent_2=optimizer_agent_2, train_data=train_loader, \
+                                validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
         "Prepare training"
 
@@ -1642,6 +1640,10 @@ def main(params):
             messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_6(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             np_messages_1 = convert_messages_to_numpy(messages_1)
             np_messages_2 = convert_messages_to_numpy(messages_2)
+
+            game.optim_params["sender_entropy_coeff_1"]=0.5-0.4*np.mean(acc_vec_11)
+            game.optim_params["sender_entropy_coeff_2"]=0.5-0.4*np.mean(acc_vec_22)
+
 
             # Save models
             if epoch%20==0:

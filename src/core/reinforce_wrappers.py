@@ -1136,7 +1136,7 @@ class AgentBaseline2(nn.Module):
           else:
               x = step_logits.argmax(dim=1)
 
-              logits.append(distr.probs)
+          logits.append(distr.probs)
 
 
           input = self.sender_embedding(x)
@@ -1764,7 +1764,7 @@ class DialogReinforce(nn.Module):
         if self.training:
             self.update_baseline('loss_self_{}'.format(sender_id), loss_self)
             self.update_baseline('loss_cross_{}'.format(sender_id), loss_cross)
-            self.update_baseline('loss_imitate_{}'.format(sender_id), loss_imitate)
+            self.update_baseline('loss_imitation_{}'.format(sender_id), loss_imitation)
             self.update_baseline('length_{}'.format(sender_id), length_loss)
 
         "6. Store results"

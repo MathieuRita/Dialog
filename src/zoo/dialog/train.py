@@ -439,7 +439,7 @@ def dump_dialog(game, n_features, device, gs_mode, epoch,past_messages_1=None,pa
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%50==0:
+        if epoch%100==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
@@ -464,7 +464,7 @@ def dump_dialog(game, n_features, device, gs_mode, epoch,past_messages_1=None,pa
 
         unif_acc += acc
         powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%50==0:
+        if epoch%100==0:
             print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
 
     unif_acc /= n_features
@@ -777,8 +777,9 @@ def dump_dialog_model_6(game, n_features, device, gs_mode, epoch,past_messages_1
     #messages_1=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_1]
     #messages_2=[m[:np.min(np.where(m==0)[0])+1] if len(np.where(m==0)[0])>0 is not None else m for m in messages_2]
 
+    similarity_messages=np.mean([levenshtein(messages_1[i],messages_2[i])/np.max([len(messages_1[i]),len(messages_2[i])]) for i in range(len(messages_1))])
 
-    print("Similarity between language = {}".format(np.mean([levenshtein(messages_1[i],messages_2[i]) for i in range(len(messages_1))])),flush=True)
+    print("Similarity between language = {}".format(similarity_messages),flush=True)
 
     if past_messages_1 is not None:
         print("Similarity evo language 1 = {}".format(np.mean([levenshtein(messages_1[i],past_messages_1[i]) for i in range(len(messages_1))])),flush=True)
@@ -786,7 +787,7 @@ def dump_dialog_model_6(game, n_features, device, gs_mode, epoch,past_messages_1
         print("Similarity evo language 2 = {}".format(np.mean([levenshtein(messages_2[i],past_messages_2[i]) for i in range(len(messages_2))])),flush=True)
 
 
-    return messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22
+    return messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages
 
 def dump_pretraining(game, n_features,pretrained_messages, device, gs_mode, epoch):
     # tiny "dataset"
@@ -1608,6 +1609,9 @@ def main(params):
         eval_loss_cross_21=[]
         eval_loss_imitation_21=[]
 
+        # Linguistic
+        similarity_languages=[]
+
         "Train"
 
         for epoch in range(int(opts.n_epochs)):
@@ -1646,9 +1650,10 @@ def main(params):
 
             if epoch==0:
                 messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
-            messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22 = dump_dialog_model_6(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+            messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_dialog_model_6(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
             np_messages_1 = convert_messages_to_numpy(messages_1)
             np_messages_2 = convert_messages_to_numpy(messages_2)
+            similarity_languages.append(similarity_messages)
 
             game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
             game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
@@ -1681,6 +1686,7 @@ def main(params):
                 np.save(opts.dir_save+'/training_info/eval_loss_self_22_{}.npy'.format(epoch), eval_loss_self_22)
                 np.save(opts.dir_save+'/training_info/eval_loss_cross_21_{}.npy'.format(epoch), eval_loss_cross_21)
                 np.save(opts.dir_save+'/training_info/eval_loss_imitation_21_{}.npy'.format(epoch), eval_loss_imitation_21)
+                np.save(opts.dir_save+'/training_info/similarity_languages_{}.npy'.format(epoch), similarity_languages)
 
             # Save accuracy/message results
             np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), np_messages_1)

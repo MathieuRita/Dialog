@@ -1824,7 +1824,7 @@ class DialogReinforceBis(nn.Module):
                       "length_regularization":0.,
                       "entropy_regularization":1.}
         """
-        super(DialogReinforce, self).__init__()
+        super(DialogReinforceBis, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
         self.optim_params = optim_params

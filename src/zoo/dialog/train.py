@@ -1559,12 +1559,23 @@ def main(params):
             loss_weights={"self":1.,"cross":1.,"imitation":1.}
         #loss_weights={"self":opts.self_weight,"cross":opts.cross_weight,"imitation":opts.imitation_weight}
 
-        game = DialogReinforce(Agent_1=agent_1,
+        #game = DialogReinforce(Agent_1=agent_1,
+        #                        Agent_2=agent_2,
+        #                        loss_understanding=loss_understanding,
+        #                        loss_imitation=loss_message_imitation,
+        #                        optim_params=optim_params,
+        #                        loss_weights=loss_weights,
+        #                        device=device)
+
+        game = DialogReinforceBis(Agent_1=agent_1,
                                 Agent_2=agent_2,
                                 loss_understanding=loss_understanding,
                                 loss_imitation=loss_message_imitation,
                                 optim_params=optim_params,
                                 loss_weights=loss_weights,
+                                n_features=opts.n_features,
+                                max_len=opts.max_len,
+                                batch_size=opts.batch_size,
                                 device=device)
 
         "Create optimizers"

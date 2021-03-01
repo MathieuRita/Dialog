@@ -26,7 +26,7 @@ from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerD
 
 # Propre
 from src.core.reinforce_wrappers import AgentBaseline2,AgentSharedRNN,AgentSharedEmbedding
-from src.core.reinforce_wrappers import DialogReinforce,DialogReinforceBis
+from src.core.reinforce_wrappers import DialogReinforce,DialogReinforceBis,DialogReinforceKL
 from src.core.trainers import TrainerDialog
 
 def get_params(params):

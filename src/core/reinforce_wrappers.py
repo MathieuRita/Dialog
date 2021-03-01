@@ -1156,6 +1156,260 @@ class AgentBaseline2(nn.Module):
       return sequence, logits, entropy
 
 
+class AgentBaselineKL(nn.Module):
+
+    """
+    AgentBaseline is composed of a couple of modalities:
+        - sender
+        - receiver
+    In AgentBaseline, Sender and Receiver parts are independent
+    """
+
+    def __init__(self,
+                n_features,
+                vocab_size,
+                max_len,
+                embed_dim,
+                hidden_size,
+                sender_cell,
+                receiver_cell,
+                sender_num_layers,
+                receiver_num_layers,
+                force_eos):
+        super(AgentBaseline2, self).__init__()
+
+        # Common to sender and receiver
+        self.force_eos = force_eos
+
+        self.max_len = max_len
+        if force_eos:
+            self.max_len -= 1
+
+        self.embed_dim = embed_dim
+        self.vocab_size = vocab_size
+        self.hidden_size=hidden_size
+        self.sos_embedding = nn.Parameter(torch.zeros(embed_dim))
+
+        cell_types = {'rnn': nn.RNNCell, 'gru': nn.GRUCell, 'lstm': nn.LSTMCell}
+
+        # Sender
+        self.agent_sender = nn.Linear(n_features, hidden_size) #nn.Linear(n_features, n_hidden)
+        self.sender_cells = None
+        self.sender_num_layers = sender_num_layers
+        self.sender_norm_h = nn.LayerNorm(hidden_size)
+        self.sender_norm_c = nn.LayerNorm(hidden_size)
+        self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
+        self.sender_embedding = nn.Embedding(vocab_size, embed_dim)
+
+        sender_cell = sender_cell.lower()
+
+        if sender_cell not in cell_types:
+            raise ValueError(f"Unknown RNN Cell: {sender_cell}")
+
+        cell_type = cell_types[sender_cell]
+        self.sender_cells = nn.ModuleList([
+            cell_type(input_size=embed_dim, hidden_size=hidden_size) if i == 0 else \
+            cell_type(input_size=hidden_size, hidden_size=hidden_size) for i in range(self.sender_num_layers)])
+
+        self.reset_parameters()
+
+        # Receiver
+        self.agent_receiver = nn.Linear(hidden_size, n_features) #nn.Linear(n_hidden, n_features)
+        self.receiver_cells = None
+        self.receiver_num_layers = receiver_num_layers
+        self.receiver_norm_h = nn.LayerNorm(hidden_size)
+        self.receiver_norm_c = nn.LayerNorm(hidden_size)
+        self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
+        self.receiver_embedding = nn.Embedding(vocab_size, embed_dim)
+
+        receiver_cell = receiver_cell.lower()
+
+        if receiver_cell not in cell_types:
+            raise ValueError(f"Unknown RNN Cell: {receiver_cell}")
+
+        cell_type = cell_types[receiver_cell]
+        self.receiver_cells = nn.ModuleList([
+            cell_type(input_size=embed_dim, hidden_size=hidden_size) if i == 0 else \
+            cell_type(input_size=hidden_size, hidden_size=hidden_size) for i in range(self.receiver_num_layers)])
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.normal_(self.sos_embedding, 0.0, 0.01)
+
+    def send(self, x, eval=False):
+        prev_hidden = [self.agent_sender(x)]
+        prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.sender_num_layers - 1)])
+
+        prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.sender_num_layers)]  # only used for LSTM
+
+        input = torch.stack([self.sos_embedding] * x.size(0))
+
+        sequence = []
+        logits = []
+        whole_logits = []
+        entropy = []
+
+        for step in range(self.max_len):
+            for i, layer in enumerate(self.sender_cells):
+                if isinstance(layer, nn.LSTMCell):
+                    h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
+                    h_t = self.sender_norm_h(h_t)
+                    c_t = self.sender_norm_c(c_t)
+                    prev_c[i] = c_t
+                else:
+                    h_t = layer(input, prev_hidden[i])
+                    h_t = self.sender_norm_h(h_t)
+                prev_hidden[i] = h_t
+                input = h_t
+
+
+            step_logits = F.log_softmax(self.hidden_to_output(h_t), dim=1)
+
+            distr = Categorical(logits=step_logits)
+            entropy.append(distr.entropy())
+
+            if self.training and not eval:
+                x = distr.sample()
+            else:
+                x = step_logits.argmax(dim=1)
+
+            logits.append(distr.log_prob(x))
+            whole_logits.append(step_logits)
+
+            input = self.sender_embedding(x)
+            sequence.append(x)
+
+        sequence = torch.stack(sequence).permute(1, 0)
+        logits = torch.stack(logits).permute(1, 0)
+        whole_logits = torch.stack(whole_logits).permute(1,2, 0)
+        entropy = torch.stack(entropy).permute(1, 0)
+
+        if self.force_eos:
+            zeros = torch.zeros((sequence.size(0), 1)).to(sequence.device)
+            sequence = torch.cat([sequence, zeros.long()], dim=1)
+            logits = torch.cat([logits, zeros], dim=1)
+            entropy = torch.cat([entropy, zeros], dim=1)
+
+        return sequence, logits,whole_logits, entropy
+
+    def receive(self,message, receiver_input, message_lengths):
+
+      if message_lengths is None:
+        message_lengths=find_lengths(message)
+
+      prev_hidden = [torch.zeros((message.size(0),self.hidden_size)).to("cuda")]
+      prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.receiver_num_layers - 1)])
+
+      prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.receiver_num_layers)]  # only used for LSTM
+
+      inputs = self.receiver_embedding(message)
+
+      sequence = []
+      logits = []
+      entropy = []
+
+      for step in range(self.max_len):
+
+          input=inputs[:,step,:]
+
+          for i, layer in enumerate(self.receiver_cells):
+              if isinstance(layer, nn.LSTMCell):
+                  h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
+                  h_t = self.receiver_norm_h(h_t)
+                  c_t = self.receiver_norm_c(c_t)
+                  prev_c[i] = c_t
+              else:
+                  h_t = layer(input, prev_hidden[i])
+                  h_t = self.norm_h(h_t)
+              prev_hidden[i] = h_t
+
+
+          #step_logits = F.log_softmax(self.agent_receiver(h_t,None), dim=1)
+          agent_output = self.agent_receiver(h_t)
+          log = torch.zeros(agent_output.size(0)).to(agent_output.device)
+          ent = log
+
+          logits.append(log)
+          entropy.append(ent)
+          sequence.append(agent_output)
+
+      sequence = torch.stack(sequence).permute(1, 0, 2)
+      logits = torch.stack(logits).permute(1, 0)
+      entropy = torch.stack(entropy).permute(1, 0)
+
+      # Here choose EOS
+      #sequence=sequence[:,-1,:]
+      #logits=logits[:,-1]
+      #entropy=entropy[:,-1]
+
+      output=[]
+      for j in range(sequence.size(0)):
+        output.append(sequence[j,message_lengths[j]-1,:])
+
+      output=torch.stack(output)
+      logits=logits[:,-1]
+      entropy=entropy[:,-1]
+
+      return output, logits, entropy
+
+    def imitate(self,x):
+
+      prev_hidden = [self.agent_sender(x)]
+      prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.sender_num_layers - 1)])
+
+      prev_c = [torch.zeros_like(prev_hidden[0]) for _ in range(self.sender_num_layers)]  # only used for LSTM
+
+      input = torch.stack([self.sos_embedding] * x.size(0))
+
+      sequence = []
+      logits = []
+      entropy = []
+
+      for step in range(self.max_len):
+          for i, layer in enumerate(self.sender_cells):
+              if isinstance(layer, nn.LSTMCell):
+                  h_t, c_t = layer(input, (prev_hidden[i], prev_c[i]))
+                  h_t = self.sender_norm_h(h_t)
+                  c_t = self.sender_norm_c(c_t)
+                  prev_c[i] = c_t
+              else:
+                  h_t = layer(input, prev_hidden[i])
+                  h_t = self.sender_norm_h(h_t)
+              prev_hidden[i] = h_t
+              input = h_t
+
+
+          step_logits = F.log_softmax(self.hidden_to_output(h_t), dim=1)
+
+          distr = Categorical(logits=step_logits)
+          entropy.append(distr.entropy())
+
+          if self.training:
+              x = distr.sample()
+          else:
+              x = step_logits.argmax(dim=1)
+
+          logits.append(distr.probs)
+
+
+          input = self.sender_embedding(x)
+          sequence.append(x)
+
+      sequence = torch.stack(sequence).permute(1, 0)
+      logits = torch.stack(logits).permute(1,2, 0)
+      entropy = torch.stack(entropy).permute(1, 0)
+
+      if self.force_eos:
+          zeros = torch.zeros((sequence.size(0), 1)).to(sequence.device)
+
+          sequence = torch.cat([sequence, zeros.long()], dim=1)
+          logits = torch.cat([logits, zeros], dim=1)
+          entropy = torch.cat([entropy, zeros], dim=1)
+
+      return sequence, logits, entropy
+
+
 class AgentSharedRNN(nn.Module):
 
     """
@@ -2045,7 +2299,7 @@ class DialogReinforceKL(nn.Module):
 
         " 1. Agent actions "
         # Message sending
-        message, log_prob_s, entropy_s = agent_sender.send(sender_input)
+        message, log_prob_s,whole_log_prob_s, entropy_s = agent_sender.send(sender_input)
         message_lengths = find_lengths(message)
         # Cross listening
         receiver_output_cross, log_prob_r_cross, entropy_r_cross = agent_receiver.receive(message, receiver_input, message_lengths)
@@ -2054,7 +2308,7 @@ class DialogReinforceKL(nn.Module):
         # Imitation
         #candidates_cross=receiver_output_cross.argmax(dim=1)
         #message_reconstruction, prob_reconstruction, _ = agent_receiver.imitate(sender_input)
-        message_other, other_log_prob_s, _ = agent_receiver.send(sender_input,eval=True)
+        message_other, other_log_prob_s,other_whole_log_prob_s, _ = agent_receiver.send(sender_input,eval=True)
         message_other_lengths = find_lengths(message_other)
         send_output, _, _ = agent_sender.receive(message_other, receiver_input, message_other_lengths)
 
@@ -2066,9 +2320,11 @@ class DialogReinforceKL(nn.Module):
         #_, rest_und_cross = self.loss_understanding(sender_input,send_output)
         #loss_imitation=loss_imitation*rest_und_cross["acc"]
         prob_conf=torch.exp((last_input*F.log_softmax(send_output,dim=1)).sum(1))
-        KL_div=torch.nn.KLDivLoss(reduce=False)
-        loss_imitation=KL_div(log_prob_s.reshape(log_prob_s.size(0)*log_prob_s.size(1)),other_log_prob_s.reshape(other_log_prob_s.size(0)*other_log_prob_s.size(1)))
-        loss_imitation=loss_imitation.reshape(log_prob_s.size(0),log_prob_s.size(1))
+        KL_div=torch.nn.KLDivLoss(reduce=True)
+        #loss_imitation=KL_div(whole_log_prob_s.reshape(whole_log_prob_s.size(0)*whole_log_prob_s.size(1)*whole_log_prob_s.size(2)),other_whole_log_prob_s.reshape(other_whole_log_prob_s.size(0)*other_whole_log_prob_s.size(1)*other_whole_log_prob_s.size(2)))
+        loss_imitation = KL_div(whole_log_prob_s,other_whole_log_prob_s)
+        loss_imitation=loss_imitation.sum(1)
+        #loss_imitation=loss_imitation.reshape(log_prob_s.size(0),log_prob_s.size(1))
         loss_imitation*=prob_conf
 
         # Average loss. Rk. Sortir loss_imitation de cette somme

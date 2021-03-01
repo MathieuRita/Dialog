@@ -25,7 +25,7 @@ from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialo
 from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
 
 # Propre
-from src.core.reinforce_wrappers import AgentBaseline2,AgentSharedRNN,AgentSharedEmbedding
+from src.core.reinforce_wrappers import AgentBaseline2,AgentSharedRNN,AgentSharedEmbedding,AgentBaselineKL
 from src.core.reinforce_wrappers import DialogReinforce,DialogReinforceBis,DialogReinforceKL
 from src.core.trainers import TrainerDialog
 

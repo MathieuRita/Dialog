@@ -1176,7 +1176,7 @@ class AgentBaselineKL(nn.Module):
                 sender_num_layers,
                 receiver_num_layers,
                 force_eos):
-        super(AgentBaseline2, self).__init__()
+        super(AgentBaselineKL, self).__init__()
 
         # Common to sender and receiver
         self.force_eos = force_eos

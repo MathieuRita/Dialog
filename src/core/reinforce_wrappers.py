@@ -1282,7 +1282,7 @@ class AgentBaselineKL(nn.Module):
 
         sequence = torch.stack(sequence).permute(1, 0)
         logits = torch.stack(logits).permute(1, 0)
-        whole_logits = torch.stack(whole_logits).permute(1,2, 0)
+        whole_logits = torch.stack(whole_logits).permute(1,0, 2)
         entropy = torch.stack(entropy).permute(1, 0)
 
         if self.force_eos:
@@ -2319,12 +2319,15 @@ class DialogReinforceKL(nn.Module):
         #loss_imitation, rest_imitation = self.loss_message_imitation(message_to_imitate,prob_reconstruction,message_to_imitate_lengths)
         #_, rest_und_cross = self.loss_understanding(sender_input,send_output)
         #loss_imitation=loss_imitation*rest_und_cross["acc"]
-        prob_conf=torch.exp((last_input*F.log_softmax(send_output,dim=1)).sum(1))
-        KL_div=torch.nn.KLDivLoss(reduce=True)
+        prob_conf=torch.exp((sender_input*F.log_softmax(send_output,dim=1)).sum(1))
+        KL_div=torch.nn.KLDivLoss(reduce=False)
         #loss_imitation=KL_div(whole_log_prob_s.reshape(whole_log_prob_s.size(0)*whole_log_prob_s.size(1)*whole_log_prob_s.size(2)),other_whole_log_prob_s.reshape(other_whole_log_prob_s.size(0)*other_whole_log_prob_s.size(1)*other_whole_log_prob_s.size(2)))
-        loss_imitation = KL_div(whole_log_prob_s,other_whole_log_prob_s)
-        loss_imitation=loss_imitation.sum(1)
-        #loss_imitation=loss_imitation.reshape(log_prob_s.size(0),log_prob_s.size(1))
+        loss_imitation = KL_div(torch.exp(whole_log_prob_s.reshape([whole_log_prob_s.size(0)*whole_log_prob_s.size(1),whole_log_prob_s.size(2)])),torch.exp(other_whole_log_prob_s.reshape([other_whole_log_prob_s.size(0)*other_whole_log_prob_s.size(1),other_whole_log_prob_s.size(2)])))
+        loss_imitation=loss_imitation.reshape([whole_log_prob_s.size(0),whole_log_prob_s.size(1),whole_log_prob_s.size(2)])
+
+        loss_imitation=loss_imitation.sum(2).sum(1)
+        rest_imitation={"acc_imitation":torch.tensor([0.])}
+
         loss_imitation*=prob_conf
 
         # Average loss. Rk. Sortir loss_imitation de cette somme

@@ -1521,7 +1521,7 @@ def main(params):
 
         "Define agents"
 
-        agent_1=AgentBaseline2(vocab_size=opts.vocab_size,
+        agent_1=AgentBaselineKL(vocab_size=opts.vocab_size,
                                 n_features=opts.n_features,
                                 max_len=opts.max_len,
                                 embed_dim=opts.sender_embedding,
@@ -1532,7 +1532,7 @@ def main(params):
                                 receiver_num_layers=opts.receiver_num_layers,
                                 force_eos=force_eos)
 
-        agent_2=AgentBaseline2(vocab_size=opts.vocab_size,
+        agent_2=AgentBaselineKL(vocab_size=opts.vocab_size,
                                 n_features=opts.n_features,
                                 max_len=opts.max_len,
                                 embed_dim=opts.sender_embedding,
@@ -1567,16 +1567,24 @@ def main(params):
         #                        loss_weights=loss_weights,
         #                        device=device)
 
-        game = DialogReinforceBis(Agent_1=agent_1,
+        game = DialogReinforceKL(Agent_1=agent_1,
                                 Agent_2=agent_2,
                                 loss_understanding=loss_understanding,
                                 loss_imitation=loss_message_imitation,
                                 optim_params=optim_params,
                                 loss_weights=loss_weights,
-                                n_features=opts.n_features,
-                                max_len=opts.max_len,
-                                batch_size=opts.batch_size,
                                 device=device)
+
+        #game = DialogReinforceBis(Agent_1=agent_1,
+        #                        Agent_2=agent_2,
+        #                        loss_understanding=loss_understanding,
+        #                        loss_imitation=loss_message_imitation,
+        #                        optim_params=optim_params,
+        #                        loss_weights=loss_weights,
+        #                        n_features=opts.n_features,
+        #                        max_len=opts.max_len,
+        #                        batch_size=opts.batch_size,
+        #                        device=device)
 
         "Create optimizers"
         optimizer_agent_1 = core.build_optimizer(list(game.agent_1.parameters()))

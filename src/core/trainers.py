@@ -491,10 +491,10 @@ class TrainerDialog:
             batch = move_to(batch, self.device)
 
             if iter%2==0:
-              optimized_loss, rest = self.game(*batch,direction="1->2")
-              self.optimizer_agent_1.zero_grad()
-              optimized_loss.backward()
-              self.optimizer_agent_1.step()
+                optimized_loss, rest = self.game(*batch,direction="1->2")
+                self.optimizer_agent_1.zero_grad()
+                optimized_loss.backward()
+                self.optimizer_agent_1.step()
             else:
                 optimized_loss, rest = self.game(*batch,direction="2->1")
                 self.optimizer_agent_2.zero_grad()

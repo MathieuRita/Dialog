@@ -1451,7 +1451,7 @@ class AgentPol(nn.Module):
         self.w_mem={}
         self.est_policy={}
 
-        for k in range(self.n_features):
+        for k in range(n_features):
             self.mem[k]=[]
             self.w_mem[k]=[]
             self.est_policy[k]=torch.zeros([self.max_len,self.vocab_size]).to("cuda")
@@ -2239,7 +2239,8 @@ class DialogReinforce(nn.Module):
         #loss_imitation, rest_imitation = self.loss_message_imitation(message,prob_reconstruction,message_lengths)
         loss_imitation, rest_imitation = self.loss_message_imitation(message_to_imitate,prob_reconstruction,message_to_imitate_lengths)
         _, rest_und_cross = self.loss_understanding(sender_input,send_output)
-        loss_imitation=loss_imitation*rest_und_cross["acc"]
+        prob_conf=torch.exp((sender_input*F.log_softmax(send_output,dim=1)).sum(1))
+        loss_imitation=loss_imitation*prob_conf
 
         # Average loss. Rk. Sortir loss_imitation de cette somme
         loss = self.loss_weights["self"]*loss_self + self.loss_weights["cross"]*loss_cross + self.loss_weights["imitation"]*loss_imitation
@@ -2321,6 +2322,9 @@ class DialogReinforceMemory(nn.Module):
                  loss_imitation,
                  optim_params,
                  loss_weights,
+                 vocab_size,
+                 max_len,
+                 n_features,
                  device):
         """
         optim_params={"length_cost":0.,
@@ -2346,6 +2350,7 @@ class DialogReinforceMemory(nn.Module):
         self.n_points = defaultdict(float)
         self.max_len=max_len
         self.vocab_size=vocab_size
+        self.n_features=n_features
         self.device=device
 
     def forward(self,
@@ -2387,23 +2392,34 @@ class DialogReinforceMemory(nn.Module):
         message_to_imitate_lengths = find_lengths(message_to_imitate)
         send_output, _, _ = agent_sender.receive(message_to_imitate, receiver_input, message_to_imitate_lengths)
 
-        i_hat=send_output.argmax(1)
+        i_hat=send_output.argmax(1).cpu().numpy()
         policy_prob=torch.exp(send_output.max(1).values)
         for j in range(send_output.size(0)):
             m=message_to_imitate[j]
-            m_dense=self.to_dense(m)
+            m_dense=torch.zeros([self.max_len,self.vocab_size]).to("cuda")
+            for i in range(len(m)):
+                m_dense[i,m[i]]=1.
             agent_sender.mem[i_hat[j]].append(m_dense)
-            agent_sender.w_mem[i_hat[j]].append(torch.exp(policy_prob))
+            agent_sender.w_mem[i_hat[j]].append(torch.exp(policy_prob[j]))
 
-        for i in mem:
-            agent_sender.est_policy[i]=(torch.stack(agent_sender.mem[i])*torch.stack(agent_sender.w_mem[i])).sum(0)
-            agent_sender.est_policy[i]/=torch.stack(agent_sender.w_mem[i]).sum(0)
+        for i in agent_sender.mem:
+          if len(agent_sender.mem[i])>0:
+              agent_sender.est_policy[i]=(torch.stack(agent_sender.mem[i])*torch.stack(agent_sender.w_mem[i]).unsqueeze(1).unsqueeze(2)).sum(0)
+              agent_sender.est_policy[i]/=torch.stack(agent_sender.w_mem[i]).sum(0)
 
-        print(agent_sender.est_policy[0])
+        policy_receiver=[]
+
+        for i in range(sender_input.size(0)):
+          policy_receiver.append(agent_sender.est_policy[int(sender_input.argmax(1)[i].cpu().numpy())])
+
+        policy_receiver=torch.stack(policy_receiver)
+
 
         "2. Losses computation"
         loss_self, rest_self = self.loss_understanding(sender_input,receiver_output_self)
         loss_cross, rest_cross = self.loss_understanding(sender_input,receiver_output_cross)
+        loss_imitation=torch.zeros([1024]).to("cuda")
+        rest_imitation={"acc_imitation":torch.tensor([0.])}
 
         # Average loss. Rk. Sortir loss_imitation de cette somme
         loss = self.loss_weights["self"]*loss_self + self.loss_weights["cross"]*loss_cross

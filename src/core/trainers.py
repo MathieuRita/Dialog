@@ -487,19 +487,22 @@ class TrainerDialog:
         n_batches = 0
         self.game.train()
         for iter,batch in enumerate(self.train_data):
+
+            batch = move_to(batch, self.device)
+
             if iter%2==0:
               optimized_loss, rest = self.game(*batch,direction="1->2")
+              self.optimizer_agent_1.zero_grad()
+              optimized_loss.backward()
+              self.optimizer_agent_1.step()
             else:
-              optimized_loss, rest = self.game(*batch,direction="2->1")
-            batch = move_to(batch, self.device)
-            mean_rest = _add_dicts_2(mean_rest, rest)
+                optimized_loss, rest = self.game(*batch,direction="2->1")
+                self.optimizer_agent_2.zero_grad()
+                optimized_loss.backward()
+                self.optimizer_agent_2.step()
 
-            self.optimizer_agent_1.zero_grad()
-            self.optimizer_agent_2.zero_grad()
-            optimized_loss.backward()
-            self.optimizer_agent_1.step()
-            self.optimizer_agent_2.step()
 
+             mean_rest = _add_dicts_2(mean_rest, rest)
 
             n_batches += 1
             mean_loss += optimized_loss

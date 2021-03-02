@@ -1521,27 +1521,29 @@ def main(params):
 
         "Define agents"
 
-        agent_1=AgentPol(vocab_size=opts.vocab_size,
-                                n_features=opts.n_features,
-                                max_len=opts.max_len,
-                                embed_dim=opts.sender_embedding,
-                                hidden_size=opts.sender_hidden,
-                                sender_cell=opts.sender_cell,
-                                receiver_cell=opts.receiver_cell,
-                                sender_num_layers=opts.sender_num_layers,
-                                receiver_num_layers=opts.receiver_num_layers,
-                                force_eos=force_eos)
 
-        agent_2=AgentPol(vocab_size=opts.vocab_size,
-                                n_features=opts.n_features,
-                                max_len=opts.max_len,
-                                embed_dim=opts.sender_embedding,
-                                hidden_size=opts.sender_hidden,
-                                sender_cell=opts.sender_cell,
-                                receiver_cell=opts.receiver_cell,
-                                sender_num_layers=opts.sender_num_layers,
-                                receiver_num_layers=opts.receiver_num_layers,
-                                force_eos=force_eos)
+        agent_1=AgentBaseline2(vocab_size=opts.vocab_size,
+                        n_features=opts.n_features,
+                        max_len=opts.max_len,
+                        embed_dim=opts.sender_embedding,
+                        hidden_size=opts.sender_hidden,
+                        sender_cell=opts.sender_cell,
+                        receiver_cell=opts.receiver_cell,
+                        sender_num_layers=opts.sender_num_layers,
+                        receiver_num_layers=opts.receiver_num_layers,
+                        force_eos=force_eos)
+
+        agent_2=AgentBaseline2(vocab_size=opts.vocab_size,
+                        n_features=opts.n_features,
+                        max_len=opts.max_len,
+                        embed_dim=opts.sender_embedding,
+                        hidden_size=opts.sender_hidden,
+                        sender_cell=opts.sender_cell,
+                        receiver_cell=opts.receiver_cell,
+                        sender_num_layers=opts.sender_num_layers,
+                        receiver_num_layers=opts.receiver_num_layers,
+                        force_eos=force_eos)
+
 
         "Define game"
 
@@ -1559,13 +1561,13 @@ def main(params):
             loss_weights={"self":1.,"cross":1.,"imitation":1.}
         #loss_weights={"self":opts.self_weight,"cross":opts.cross_weight,"imitation":opts.imitation_weight}
 
-        #game = DialogReinforce(Agent_1=agent_1,
-        #                        Agent_2=agent_2,
-        #                        loss_understanding=loss_understanding,
-        #                        loss_imitation=loss_message_imitation,
-        #                        optim_params=optim_params,
-        #                        loss_weights=loss_weights,
-        #                        device=device)
+        game = DialogReinforce(Agent_1=agent_1,
+                                Agent_2=agent_2,
+                                loss_understanding=loss_understanding,
+                                loss_imitation=loss_message_imitation,
+                                optim_params=optim_params,
+                                loss_weights=loss_weights,
+                                device=device)
 
         #game = DialogReinforceKL(Agent_1=agent_1,
         #                        Agent_2=agent_2,
@@ -1575,15 +1577,16 @@ def main(params):
         #                        loss_weights=loss_weights,
         #                        device=device)
 
-        game = DialogReinforceMemory(Agent_1=agent_1,
-                                Agent_2=agent_2,
-                                loss_understanding=loss_understanding,
-                                loss_imitation=loss_message_imitation,
-                                optim_params=optim_params,
-                                loss_weights=loss_weights,
-                                max_len=opts.max_len,
-                                n_features=opts.n_features,
-                                device=device)
+        #game = DialogReinforceMemory(Agent_1=agent_1,
+        #                        Agent_2=agent_2,
+        #                        loss_understanding=loss_understanding,
+        #                        loss_imitation=loss_message_imitation,
+        #                        optim_params=optim_params,
+        #                        loss_weights=loss_weights,
+        #                        max_len=opts.max_len,
+        #                        n_features=opts.n_features,
+        #                        vocab_size=opts.vocab_size,
+        #                        device=device)
 
         #game = DialogReinforceBis(Agent_1=agent_1,
         #                        Agent_2=agent_2,
@@ -1597,9 +1600,25 @@ def main(params):
         #                        device=device)
 
         "Create optimizers"
-        optimizer_agent_1 = core.build_optimizer(list(game.agent_1.parameters()))
-        optimizer_agent_2 = core.build_optimizer(list(game.agent_2.parameters()))
+        receiver_1_parameters = list(game.agent_1.agent_receiver.parameters()) + \
+                              list(game.agent_1.receiver_cells.parameters()) + \
+                              list(game.agent_1.receiver_norm_h.parameters()) + \
+                              list(game.agent_1.receiver_norm_c.parameters()) + \
+                              list(game.agent_1.hidden_to_output.parameters()) + \
+                              list(game.agent_1.receiver_embedding.parameters())
+
+        receiver_2_parameters = list(game.agent_2.agent_receiver.parameters()) + \
+                              list(game.agent_2.receiver_cells.parameters()) + \
+                              list(game.agent_2.receiver_norm_h.parameters()) + \
+                              list(game.agent_2.receiver_norm_c.parameters()) + \
+                              list(game.agent_2.hidden_to_output.parameters()) + \
+                              list(game.agent_2.receiver_embedding.parameters())
+
+        optimizer_agent_1 = core.build_optimizer(list(game.agent_1.parameters())+receiver_2_parameters)
+        optimizer_agent_2 = core.build_optimizer(list(game.agent_2.parameters())+receiver_1_parameters)
         #optimizer = core.build_optimizer(list(game.parameters()))
+
+
 
         "Create trainer"
         #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \

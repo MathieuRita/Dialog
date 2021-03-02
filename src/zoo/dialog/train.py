@@ -25,8 +25,8 @@ from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialo
 from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
 
 # Propre
-from src.core.reinforce_wrappers import AgentBaseline2,AgentSharedRNN,AgentSharedEmbedding,AgentBaselineKL
-from src.core.reinforce_wrappers import DialogReinforce,DialogReinforceBis,DialogReinforceKL
+from src.core.reinforce_wrappers import AgentBaseline2,AgentSharedRNN,AgentSharedEmbedding,AgentBaselineKL,AgentPol
+from src.core.reinforce_wrappers import DialogReinforce,DialogReinforceBis,DialogReinforceKL,DialogReinforceMemory
 from src.core.trainers import TrainerDialog
 
 def get_params(params):
@@ -1521,7 +1521,7 @@ def main(params):
 
         "Define agents"
 
-        agent_1=AgentBaselineKL(vocab_size=opts.vocab_size,
+        agent_1=AgentPol(vocab_size=opts.vocab_size,
                                 n_features=opts.n_features,
                                 max_len=opts.max_len,
                                 embed_dim=opts.sender_embedding,
@@ -1532,7 +1532,7 @@ def main(params):
                                 receiver_num_layers=opts.receiver_num_layers,
                                 force_eos=force_eos)
 
-        agent_2=AgentBaselineKL(vocab_size=opts.vocab_size,
+        agent_2=AgentPol(vocab_size=opts.vocab_size,
                                 n_features=opts.n_features,
                                 max_len=opts.max_len,
                                 embed_dim=opts.sender_embedding,
@@ -1567,12 +1567,22 @@ def main(params):
         #                        loss_weights=loss_weights,
         #                        device=device)
 
-        game = DialogReinforceKL(Agent_1=agent_1,
+        #game = DialogReinforceKL(Agent_1=agent_1,
+        #                        Agent_2=agent_2,
+        #                        loss_understanding=loss_understanding,
+        #                        loss_imitation=loss_message_imitation,
+        #                        optim_params=optim_params,
+        #                        loss_weights=loss_weights,
+        #                        device=device)
+
+        game = DialogReinforceMemory(Agent_1=agent_1,
                                 Agent_2=agent_2,
                                 loss_understanding=loss_understanding,
                                 loss_imitation=loss_message_imitation,
                                 optim_params=optim_params,
                                 loss_weights=loss_weights,
+                                max_len=opts.max_len,
+                                n_features=opts.n_features,
                                 device=device)
 
         #game = DialogReinforceBis(Agent_1=agent_1,

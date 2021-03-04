@@ -502,7 +502,7 @@ class TrainerDialog:
                 self.optimizer_agent_2.step()
 
 
-             mean_rest = _add_dicts_2(mean_rest, rest)
+            mean_rest = _add_dicts_2(mean_rest, rest)
 
             n_batches += 1
             mean_loss += optimized_loss

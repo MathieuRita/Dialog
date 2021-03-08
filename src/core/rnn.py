@@ -62,8 +62,6 @@ class RnnEncoder(nn.Module):
         if isinstance(self.cell, nn.LSTM):
             rnn_hidden, _ = rnn_hidden
 
-        #rnn_hidden=self.norm_h(rnn_hidden)
-
         return rnn_hidden[-1]
 
 

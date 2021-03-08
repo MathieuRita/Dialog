@@ -977,9 +977,11 @@ class AgentBaseline2(nn.Module):
             raise ValueError(f"Unknown RNN Cell: {receiver_cell}")
 
         cell_type = cell_types[receiver_cell]
-        self.receiver_cells = nn.ModuleList([
-            cell_type(input_size=embed_dim, hidden_size=hidden_size) if i == 0 else \
-            cell_type(input_size=hidden_size, hidden_size=hidden_size) for i in range(self.receiver_num_layers)])
+        self.receiver_cell = cell_types[cell](input_size=embed_dim, batch_first=True,
+                               hidden_size=hidden_size, num_layers=receiver_num_layers)
+        #self.receiver_cells = nn.ModuleList([
+        #    cell_type(input_size=embed_dim, hidden_size=hidden_size) if i == 0 else \
+        #    cell_type(input_size=hidden_size, hidden_size=hidden_size) for i in range(self.receiver_num_layers)])
 
         self.reset_parameters()
 
@@ -1098,6 +1100,29 @@ class AgentBaseline2(nn.Module):
       entropy=entropy[:,-1]
 
       return output, logits, entropy
+
+    def receive_2(self,message, receiver_input, message_lengths):
+
+      emb = self.receiver_embedding(message)
+
+      if message_lengths is None:
+        message_lengths = find_lengths(message)
+
+      packed = nn.utils.rnn.pack_padded_sequence(
+          emb, message_lengths, batch_first=True, enforce_sorted=False)
+      _, rnn_hidden = self.receiver_cell(packed)
+
+      if isinstance(self.cell, nn.LSTM):
+          rnn_hidden, _ = rnn_hidden
+
+      encoded = rnn_hidden[-1]
+      #encoded=self.receiver_norm_h(encoded)
+      agent_output = self.agent(encoded, input)
+
+      logits = torch.zeros(agent_output.size(0)).to(agent_output.device)
+      entropy = logits
+
+      return agent_output, logits, entropy
 
     def imitate(self,x):
 
@@ -2222,9 +2247,9 @@ class DialogReinforce(nn.Module):
         message, log_prob_s, entropy_s = agent_sender.send(sender_input)
         message_lengths = find_lengths(message)
         # Cross listening
-        receiver_output_cross, log_prob_r_cross, entropy_r_cross = agent_receiver.receive(message, receiver_input, message_lengths)
+        receiver_output_cross, log_prob_r_cross, entropy_r_cross = agent_receiver.receive_2(message, receiver_input, message_lengths)
         # Self listening
-        receiver_output_self, log_prob_r_self, entropy_r_self = agent_sender.receive(message, receiver_input, message_lengths)
+        receiver_output_self, log_prob_r_self, entropy_r_self = agent_sender.receive_2(message, receiver_input, message_lengths)
         # Imitation
         #candidates_cross=receiver_output_cross.argmax(dim=1)
         #message_reconstruction, prob_reconstruction, _ = agent_receiver.imitate(sender_input)

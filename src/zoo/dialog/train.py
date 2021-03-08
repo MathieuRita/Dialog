@@ -1602,16 +1602,16 @@ def main(params):
         "Create optimizers"
         receiver_1_parameters = list(game.agent_1.agent_receiver.parameters()) + \
                               list(game.agent_1.receiver_cells.parameters()) + \
-                              list(game.agent_1.receiver_norm_h.parameters()) + \
-                              list(game.agent_1.receiver_norm_c.parameters()) + \
-                              list(game.agent_1.hidden_to_output.parameters()) + \
+                              #list(game.agent_1.receiver_norm_h.parameters()) + \
+                              #list(game.agent_1.receiver_norm_c.parameters()) + \
+                              #list(game.agent_1.hidden_to_output.parameters()) + \
                               list(game.agent_1.receiver_embedding.parameters())
 
         receiver_2_parameters = list(game.agent_2.agent_receiver.parameters()) + \
                               list(game.agent_2.receiver_cells.parameters()) + \
-                              list(game.agent_2.receiver_norm_h.parameters()) + \
-                              list(game.agent_2.receiver_norm_c.parameters()) + \
-                              list(game.agent_2.hidden_to_output.parameters()) + \
+                              #list(game.agent_2.receiver_norm_h.parameters()) + \
+                              #list(game.agent_2.receiver_norm_c.parameters()) + \
+                              #list(game.agent_2.hidden_to_output.parameters()) + \
                               list(game.agent_2.receiver_embedding.parameters())
 
         optimizer_agent_1 = core.build_optimizer(list(game.agent_1.parameters())+receiver_2_parameters)

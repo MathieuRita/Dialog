@@ -968,7 +968,7 @@ class AgentBaseline2(nn.Module):
         self.receiver_num_layers = receiver_num_layers
         self.receiver_norm_h = nn.LayerNorm(hidden_size)
         self.receiver_norm_c = nn.LayerNorm(hidden_size)
-        self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
+        #self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
         self.receiver_embedding = nn.Embedding(vocab_size, embed_dim)
 
         receiver_cell = receiver_cell.lower()
@@ -976,8 +976,10 @@ class AgentBaseline2(nn.Module):
         if receiver_cell not in cell_types:
             raise ValueError(f"Unknown RNN Cell: {receiver_cell}")
 
-        cell_type = cell_types[receiver_cell]
-        self.receiver_cell = cell_types[cell](input_size=embed_dim, batch_first=True,
+        cell_types_r = {'rnn': nn.RNN, 'gru': nn.GRU, 'lstm': nn.LSTM}
+
+        cell_type = cell_types_r[receiver_cell]
+        self.receiver_cell = cell_types_r[receiver_cell](input_size=embed_dim, batch_first=True,
                                hidden_size=hidden_size, num_layers=receiver_num_layers)
         #self.receiver_cells = nn.ModuleList([
         #    cell_type(input_size=embed_dim, hidden_size=hidden_size) if i == 0 else \
@@ -1112,12 +1114,12 @@ class AgentBaseline2(nn.Module):
           emb, message_lengths, batch_first=True, enforce_sorted=False)
       _, rnn_hidden = self.receiver_cell(packed)
 
-      if isinstance(self.cell, nn.LSTM):
+      if isinstance(self.receiver_cell, nn.LSTM):
           rnn_hidden, _ = rnn_hidden
 
       encoded = rnn_hidden[-1]
       #encoded=self.receiver_norm_h(encoded)
-      agent_output = self.agent(encoded, input)
+      agent_output = self.agent_receiver(encoded)
 
       logits = torch.zeros(agent_output.size(0)).to(agent_output.device)
       entropy = logits
@@ -2255,7 +2257,7 @@ class DialogReinforce(nn.Module):
         #message_reconstruction, prob_reconstruction, _ = agent_receiver.imitate(sender_input)
         message_to_imitate, _, _ = agent_receiver.send(sender_input,eval=True)
         message_to_imitate_lengths = find_lengths(message_to_imitate)
-        send_output, _, _ = agent_sender.receive(message_to_imitate, receiver_input, message_to_imitate_lengths)
+        send_output, _, _ = agent_sender.receive_2(message_to_imitate, receiver_input, message_to_imitate_lengths)
         message_reconstruction, prob_reconstruction, _ = agent_sender.imitate(sender_input)
 
         "2. Losses computation"

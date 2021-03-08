@@ -1633,10 +1633,10 @@ def dump_sender_receiver_dialog_model_6(game: torch.nn.Module,
             if not gs: message_2 = message_2[0]
 
 
-            output_12 = game.agent_2.receive(message_1, receiver_input, None)
-            output_11 = game.agent_1.receive(message_1, receiver_input, None)
-            output_21 = game.agent_1.receive(message_2, receiver_input, None)
-            output_22 = game.agent_2.receive(message_2, receiver_input, None)
+            output_12 = game.agent_2.receive_2(message_1, receiver_input, None)
+            output_11 = game.agent_1.receive_2(message_1, receiver_input, None)
+            output_21 = game.agent_1.receive_2(message_2, receiver_input, None)
+            output_22 = game.agent_2.receive_2(message_2, receiver_input, None)
 
             if not gs: output_11 = output_11[0]
             if not gs: output_12 = output_12[0]

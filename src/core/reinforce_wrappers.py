@@ -2306,8 +2306,8 @@ class DialogReinforce(nn.Module):
         elif self.baseline_mode=="new":
             policy_loss_self = ((loss_self.detach() - loss_self.detach().mean())/(loss_self.detach().std()) * log_prob).mean()
             policy_loss_cross = ((loss_cross.detach() - loss_cross.detach().mean())/(loss_cross.detach().std())  * log_prob).mean()
-            policy_loss_imitation = ((loss_imitation.detach() - loss_imitation.detach().mean())/(loss_imitation.detach().std())  * log_prob).mean()
-            policy_length_loss = ((length_loss.float() - length_loss.float().mean())/(length_loss.detach().std())  * effective_log_prob_s).mean()
+            policy_loss_imitation = (loss_imitation.detach() - loss_imitation.detach().mean())  * log_prob).mean()
+            policy_length_loss = (length_loss.float() - length_loss.float().mean())  * effective_log_prob_s).mean()
 
         " 5. Final loss"
         policy_loss = self.loss_weights["self"]*policy_loss_self + self.loss_weights["cross"]*policy_loss_cross + self.loss_weights["imitation"]*policy_loss_imitation

@@ -1748,10 +1748,10 @@ def main(params):
                 np.save(opts.dir_save+'/training_info/eval_loss_imitation_21_{}.npy'.format(epoch), eval_loss_imitation_21)
                 np.save(opts.dir_save+'/training_info/similarity_languages_{}.npy'.format(epoch), similarity_languages)
                 #Reinforce
-                np.save(opts.dir_save+'/training_info/reinforce_term_1_{}.npy'.format(epoch), reinforce_term_1)
-                np.save(opts.dir_save+'/training_info/reinforce_term_2_{}.npy'.format(epoch), reinforce_term_2)
-                np.save(opts.dir_save+'/training_info/baseline_term_1_{}.npy'.format(epoch), baseline_term_1)
-                np.save(opts.dir_save+'/training_info/baseline_term_2_{}.npy'.format(epoch), baseline_term_2)
+                np.save(opts.dir_save+'/training_info/reinforce_term_1_{}.npy'.format(epoch), eval_reinforce_1)
+                np.save(opts.dir_save+'/training_info/reinforce_term_2_{}.npy'.format(epoch), eval_reinforce_2)
+                np.save(opts.dir_save+'/training_info/baseline_term_1_{}.npy'.format(epoch), eval_baseline_1)
+                np.save(opts.dir_save+'/training_info/baseline_term_2_{}.npy'.format(epoch), eval_baseline_2)
 
             # Save accuracy/message results
             np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), np_messages_1)
@@ -1917,8 +1917,8 @@ def main(params):
             np_messages_2 = convert_messages_to_numpy(messages_2)
             similarity_languages.append(similarity_messages)
 
-            game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
-            game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
+            #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
+            #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
 
 
             # Save models

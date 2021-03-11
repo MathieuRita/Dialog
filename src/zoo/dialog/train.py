@@ -1659,6 +1659,12 @@ def main(params):
         eval_loss_cross_21=[]
         eval_loss_imitation_21=[]
 
+        # REINFORCE
+        eval_reinforce_1=[]
+        eval_reinforce_2=[]
+        eval_baseline_1=[]
+        eval_baseline_2=[]
+
         # Linguistic
         similarity_languages=[]
 
@@ -1697,6 +1703,10 @@ def main(params):
             eval_loss_self_22.append(eval_rest["loss_self_22"])
             eval_loss_cross_21.append(eval_rest["loss_cross_21"])
             eval_loss_imitation_21.append(eval_rest["loss_imitation_21"])
+            eval_reinforce_1.append(eval_rest["reinforce_term_1"])
+            eval_reinforce_2.append(eval_rest["reinforce_term_2"])
+            eval_baseline_1.append(eval_rest["baseline_term_1"])
+            eval_baseline_2.append(eval_rest["baseline_term_2"])
 
             if epoch==0:
                 messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
@@ -1705,8 +1715,8 @@ def main(params):
             np_messages_2 = convert_messages_to_numpy(messages_2)
             similarity_languages.append(similarity_messages)
 
-            game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
-            game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
+            #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
+            #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
 
 
             # Save models
@@ -1737,6 +1747,11 @@ def main(params):
                 np.save(opts.dir_save+'/training_info/eval_loss_cross_21_{}.npy'.format(epoch), eval_loss_cross_21)
                 np.save(opts.dir_save+'/training_info/eval_loss_imitation_21_{}.npy'.format(epoch), eval_loss_imitation_21)
                 np.save(opts.dir_save+'/training_info/similarity_languages_{}.npy'.format(epoch), similarity_languages)
+                #Reinforce
+                np.save(opts.dir_save+'/training_info/reinforce_term_1_{}.npy'.format(epoch), reinforce_term_1)
+                np.save(opts.dir_save+'/training_info/reinforce_term_2_{}.npy'.format(epoch), reinforce_term_2)
+                np.save(opts.dir_save+'/training_info/baseline_term_1_{}.npy'.format(epoch), baseline_term_1)
+                np.save(opts.dir_save+'/training_info/baseline_term_2_{}.npy'.format(epoch), baseline_term_2)
 
             # Save accuracy/message results
             np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), np_messages_1)

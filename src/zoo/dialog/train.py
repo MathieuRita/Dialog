@@ -1752,6 +1752,9 @@ def main(params):
                 np.save(opts.dir_save+'/training_info/reinforce_term_2_{}.npy'.format(epoch), eval_reinforce_2)
                 np.save(opts.dir_save+'/training_info/baseline_term_1_{}.npy'.format(epoch), eval_baseline_1)
                 np.save(opts.dir_save+'/training_info/baseline_term_2_{}.npy'.format(epoch), eval_baseline_2)
+                # Policy
+                np.save(opts.dir_save+'/training_info/policy_1_{}.npy'.format(epoch),eval_rest["policy_1"].cpu().numpy())
+                np.save(opts.dir_save+'/training_info/policy_2_{}.npy'.format(epoch),eval_rest["policy_2"].cpu().numpy())
 
             # Save accuracy/message results
             np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), np_messages_1)

@@ -990,7 +990,7 @@ class AgentBaseline2(nn.Module):
     def reset_parameters(self):
         nn.init.normal_(self.sos_embedding, 0.0, 0.01)
 
-    def send(self, x, eval=False):
+    def send(self, x, eval=False,return_policies=False):
         prev_hidden = [self.agent_sender(x)]
         prev_hidden.extend([torch.zeros_like(prev_hidden[0]) for _ in range(self.sender_num_layers - 1)])
 
@@ -1027,12 +1027,14 @@ class AgentBaseline2(nn.Module):
                 x = step_logits.argmax(dim=1)
 
             logits.append(distr.log_prob(x))
+            whole_logits.append(step_logits)
 
             input = self.sender_embedding(x)
             sequence.append(x)
 
         sequence = torch.stack(sequence).permute(1, 0)
         logits = torch.stack(logits).permute(1, 0)
+        whole_logits = torch.stack(whole_logits).permute(1,0, 2)
         entropy = torch.stack(entropy).permute(1, 0)
 
         if self.force_eos:
@@ -1041,7 +1043,10 @@ class AgentBaseline2(nn.Module):
             logits = torch.cat([logits, zeros], dim=1)
             entropy = torch.cat([entropy, zeros], dim=1)
 
-        return sequence, logits, entropy
+        if return_policies:
+            return sequence,logits,whole_logits, entropy
+        else:
+            return sequence,logits, entropy
 
     def receive(self,message, receiver_input, message_lengths):
 
@@ -2247,7 +2252,7 @@ class DialogReinforce(nn.Module):
 
         " 1. Agent actions "
         # Message sending
-        message, log_prob_s, entropy_s = agent_sender.send(sender_input)
+        message, log_prob_s,whole_log_prob_s, entropy_s = agent_sender.send(sender_input,return_policies=True)
         message_lengths = find_lengths(message)
         # Cross listening
         receiver_output_cross, log_prob_r_cross, entropy_r_cross = agent_receiver.receive_2(message, receiver_input, message_lengths)
@@ -2336,8 +2341,9 @@ class DialogReinforce(nn.Module):
         rest['acc_self_{}{}'.format(sender_id,sender_id)]=rest_self['acc'].mean().item()
         rest['acc_cross_{}{}'.format(sender_id,receiver_id)]=rest_cross['acc'].mean().item()
         rest['acc_imitation_{}{}'.format(receiver_id,sender_id)]=rest_imitation['acc_imitation'].mean().item()
-        rest['reinforce_term_{}'.format(sender_id)]=policy_loss
-        rest['baseline_term_{}'.format(sender_id)]=policy_loss/log_prob.mean()
+        rest['reinforce_term_{}'.format(sender_id)]=policy_loss.detach().item()
+        rest['baseline_term_{}'.format(sender_id)]=(policy_loss/log_prob.mean()).detach().item()
+        rest['policy_{}'.format(sender_id)]=whole_log_prob_s.detach().item()
 
         return optimized_loss, rest
 

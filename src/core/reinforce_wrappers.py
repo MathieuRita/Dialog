@@ -1001,6 +1001,7 @@ class AgentBaseline2(nn.Module):
         sequence = []
         logits = []
         entropy = []
+        whole_logits = []
 
         for step in range(self.max_len):
             for i, layer in enumerate(self.sender_cells):
@@ -1027,7 +1028,7 @@ class AgentBaseline2(nn.Module):
                 x = step_logits.argmax(dim=1)
 
             logits.append(distr.log_prob(x))
-            whole_logits.append(step_logits)
+            whole_logits.append(distr.probs)
 
             input = self.sender_embedding(x)
             sequence.append(x)
@@ -2343,7 +2344,7 @@ class DialogReinforce(nn.Module):
         rest['acc_imitation_{}{}'.format(receiver_id,sender_id)]=rest_imitation['acc_imitation'].mean().item()
         rest['reinforce_term_{}'.format(sender_id)]=policy_loss.detach().item()
         rest['baseline_term_{}'.format(sender_id)]=(policy_loss/log_prob.mean()).detach().item()
-        rest['policy_{}'.format(sender_id)]=whole_log_prob_s.detach().item()
+        rest['policy_{}'.format(sender_id)]=whole_log_prob_s.detach()
 
         return optimized_loss, rest
 

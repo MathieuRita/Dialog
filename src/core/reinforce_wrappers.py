@@ -1111,7 +1111,7 @@ class AgentBaseline2(nn.Module):
         message_lengths = find_lengths(message)
 
       packed = nn.utils.rnn.pack_padded_sequence(
-          emb, message_lengths, batch_first=True, enforce_sorted=False)
+          emb, message_lengths.cpu(), batch_first=True, enforce_sorted=False)
       _, rnn_hidden = self.receiver_cell(packed)
 
       if isinstance(self.receiver_cell, nn.LSTM):
@@ -2216,6 +2216,7 @@ class DialogReinforce(nn.Module):
         self.loss_understanding = loss_understanding
         self.loss_message_imitation = loss_imitation
         self.loss_weights = loss_weights
+        self.baseline_mode="new"
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.device=device
@@ -2296,11 +2297,17 @@ class DialogReinforce(nn.Module):
         length_loss = message_lengths.float() * self.optim_params["length_cost"]
 
         "4. Variance reduction"
+        if self.baseline_mode=="original":
+            policy_loss_self = ((loss_self.detach() - self.mean_baseline['loss_self_{}'.format(sender_id)]) * log_prob).mean()
+            policy_loss_cross = ((loss_cross.detach() - self.mean_baseline['loss_cross_{}'.format(sender_id)]) * log_prob).mean()
+            policy_loss_imitation = ((loss_imitation.detach() - self.mean_baseline['loss_imitation_{}'.format(sender_id)]) * log_prob).mean()
+            policy_length_loss = ((length_loss.float() - self.mean_baseline['length_{}'.format(sender_id)]) * effective_log_prob_s).mean()
 
-        policy_loss_self = ((loss_self.detach() - self.mean_baseline['loss_self_{}'.format(sender_id)]) * log_prob).mean()
-        policy_loss_cross = ((loss_cross.detach() - self.mean_baseline['loss_cross_{}'.format(sender_id)]) * log_prob).mean()
-        policy_loss_imitation = ((loss_imitation.detach() - self.mean_baseline['loss_imitation_{}'.format(sender_id)]) * log_prob).mean()
-        policy_length_loss = ((length_loss.float() - self.mean_baseline['length_{}'.format(sender_id)]) * effective_log_prob_s).mean()
+        elif self.baseline_mode=="new":
+            policy_loss_self = ((loss_self.detach() - loss_self.detach().mean())/(loss_self.detach().std()) * log_prob).mean()
+            policy_loss_cross = ((loss_cross.detach() - loss_cross.detach().mean())/(loss_cross.detach().std())  * log_prob).mean()
+            policy_loss_imitation = ((loss_imitation.detach() - loss_imitation.detach().mean())/(loss_imitation.detach().std())  * log_prob).mean()
+            policy_length_loss = ((length_loss.float() - length_loss.float().mean())/(length_loss.detach().std())  * effective_log_prob_s).mean()
 
         " 5. Final loss"
         policy_loss = self.loss_weights["self"]*policy_loss_self + self.loss_weights["cross"]*policy_loss_cross + self.loss_weights["imitation"]*policy_loss_imitation
@@ -2329,6 +2336,8 @@ class DialogReinforce(nn.Module):
         rest['acc_self_{}{}'.format(sender_id,sender_id)]=rest_self['acc'].mean().item()
         rest['acc_cross_{}{}'.format(sender_id,receiver_id)]=rest_cross['acc'].mean().item()
         rest['acc_imitation_{}{}'.format(receiver_id,sender_id)]=rest_imitation['acc_imitation'].mean().item()
+        rest['reinforce_term_{}'.format(sender_id)]=policy_loss
+        rest['baseline_term_{}'.format(sender_id)]=policy_loss/log_prob.mean()
 
         return optimized_loss, rest
 

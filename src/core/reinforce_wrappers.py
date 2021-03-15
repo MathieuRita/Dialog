@@ -2202,7 +2202,8 @@ class DialogReinforce(nn.Module):
                  optim_params,
                  loss_weights,
                  device,
-                 baseline_mode="new"):
+                 baseline_mode="new",
+                 reward_mode="neg_loss"):
         """
         optim_params={"length_cost":0.,
                       "sender_entropy_coeff_1":0.,

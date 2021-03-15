@@ -2225,6 +2225,7 @@ class DialogReinforce(nn.Module):
         self.loss_message_imitation = loss_imitation
         self.loss_weights = loss_weights
         self.baseline_mode=baseline_mode
+        self.reward_mode=reward_mode
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.device=device

@@ -2309,8 +2309,8 @@ class DialogReinforce(nn.Module):
 
         "4. Variance reduction"
         if self.baseline_mode=="original":
-            policy_loss_self = ((loss_self.detach() - self.mean_baseline['loss_self_{}'.format(sender_id)]) * log_prob).mean()
-            policy_loss_cross = ((loss_cross.detach() - self.mean_baseline['loss_cross_{}'.format(sender_id)]) * log_prob).mean()
+            policy_loss_self = -((loss_self.detach() - self.mean_baseline['loss_self_{}'.format(sender_id)]) * log_prob).mean()
+            policy_loss_cross = -((loss_cross.detach() - self.mean_baseline['loss_cross_{}'.format(sender_id)]) * log_prob).mean()
             policy_loss_imitation = ((loss_imitation.detach() - self.mean_baseline['loss_imitation_{}'.format(sender_id)]) * log_prob).mean()
             policy_length_loss = ((length_loss.float() - self.mean_baseline['length_{}'.format(sender_id)]) * effective_log_prob_s).mean()
 

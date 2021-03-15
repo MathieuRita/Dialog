@@ -115,6 +115,10 @@ def get_params(params):
     parser.add_argument('--imitation_weight', type=float, default=1.,help='Weight for imitation')
     parser.add_argument('--optim_mode', type=str, default="cross",help='Choice for losses')
 
+    # Baseline/reward mode
+    parser.add_argument('--reward_mode', type=str, default="neg_loss",help='Choice for reward')
+    parser.add_argument('--baseline_mode', type=str, default="new",help='Choice for baseline')
+
     args = core.init(parser, params)
 
     return args
@@ -1566,38 +1570,10 @@ def main(params):
                                 loss_understanding=loss_understanding,
                                 loss_imitation=loss_message_imitation,
                                 optim_params=optim_params,
+                                baseline_mode=opts.baseline_mode,
+                                reward_mode=opts.reward_mode,
                                 loss_weights=loss_weights,
                                 device=device)
-
-        #game = DialogReinforceKL(Agent_1=agent_1,
-        #                        Agent_2=agent_2,
-        #                        loss_understanding=loss_understanding,
-        #                        loss_imitation=loss_message_imitation,
-        #                        optim_params=optim_params,
-        #                        loss_weights=loss_weights,
-        #                        device=device)
-
-        #game = DialogReinforceMemory(Agent_1=agent_1,
-        #                        Agent_2=agent_2,
-        #                        loss_understanding=loss_understanding,
-        #                        loss_imitation=loss_message_imitation,
-        #                        optim_params=optim_params,
-        #                        loss_weights=loss_weights,
-        #                        max_len=opts.max_len,
-        #                        n_features=opts.n_features,
-        #                        vocab_size=opts.vocab_size,
-        #                        device=device)
-
-        #game = DialogReinforceBis(Agent_1=agent_1,
-        #                        Agent_2=agent_2,
-        #                        loss_understanding=loss_understanding,
-        #                        loss_imitation=loss_message_imitation,
-        #                        optim_params=optim_params,
-        #                        loss_weights=loss_weights,
-        #                        n_features=opts.n_features,
-        #                        max_len=opts.max_len,
-        #                        batch_size=opts.batch_size,
-        #                        device=device)
 
         "Create optimizers"
         #receiver_1_parameters = list(game.agent_1.agent_receiver.parameters()) + \
@@ -1677,7 +1653,7 @@ def main(params):
             # Train
             list_train_loss,list_train_rest = trainer.train(n_epochs=1)
 
-            print(list_train_rest[-1],flush=True)
+            #print(list_train_rest[-1],flush=True)
 
             # Eval
             eval_loss,eval_rest = trainer.eval()

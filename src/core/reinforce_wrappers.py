@@ -2282,8 +2282,12 @@ class DialogReinforce(nn.Module):
         loss /= (self.loss_weights["self"]+self.loss_weights["cross"]+self.loss_weights["imitation"])
 
         # Reward
-        reward_self = -loss_self.detach()
-        reward_cross = -loss_cross.detach()
+        if self.reward_mode=="neg_loss":
+            reward_self = -loss_self.detach()
+            reward_cross = -loss_cross.detach()
+        elif self.reward_mode=="proba":
+            reward_self = torch.exp(-loss_self.detach())
+            reward_cross = torch.exp(-loss_cross.detach())
 
         "3. Entropy + length Regularization"
 

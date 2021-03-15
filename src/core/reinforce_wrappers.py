@@ -919,7 +919,8 @@ class AgentBaseline2(nn.Module):
                 vocab_size,
                 max_len,
                 embed_dim,
-                hidden_size,
+                sender_hidden_size,
+                receiver_hidden_size,
                 sender_cell,
                 receiver_cell,
                 sender_num_layers,
@@ -936,18 +937,19 @@ class AgentBaseline2(nn.Module):
 
         self.embed_dim = embed_dim
         self.vocab_size = vocab_size
-        self.hidden_size=hidden_size
+        self.sender_hidden_size=sender_hidden_size
+        self.receiver_hidden_size=receiver_hidden_size
         self.sos_embedding = nn.Parameter(torch.zeros(embed_dim))
 
         cell_types = {'rnn': nn.RNNCell, 'gru': nn.GRUCell, 'lstm': nn.LSTMCell}
 
         # Sender
-        self.agent_sender = nn.Linear(n_features, hidden_size) #nn.Linear(n_features, n_hidden)
+        self.agent_sender = nn.Linear(n_features, sender_hidden_size) #nn.Linear(n_features, n_hidden)
         self.sender_cells = None
         self.sender_num_layers = sender_num_layers
-        self.sender_norm_h = nn.LayerNorm(hidden_size)
-        self.sender_norm_c = nn.LayerNorm(hidden_size)
-        self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
+        self.sender_norm_h = nn.LayerNorm(sender_hidden_size)
+        self.sender_norm_c = nn.LayerNorm(sender_hidden_size)
+        self.hidden_to_output = nn.Linear(sender_hidden_size, vocab_size)
         self.sender_embedding = nn.Embedding(vocab_size, embed_dim)
 
         sender_cell = sender_cell.lower()
@@ -957,17 +959,17 @@ class AgentBaseline2(nn.Module):
 
         cell_type = cell_types[sender_cell]
         self.sender_cells = nn.ModuleList([
-            cell_type(input_size=embed_dim, hidden_size=hidden_size) if i == 0 else \
-            cell_type(input_size=hidden_size, hidden_size=hidden_size) for i in range(self.sender_num_layers)])
+            cell_type(input_size=embed_dim, hidden_size=sender_hidden_size) if i == 0 else \
+            cell_type(input_size=sender_hidden_size, hidden_size=sender_hidden_size) for i in range(self.sender_num_layers)])
 
         self.reset_parameters()
 
         # Receiver
-        self.agent_receiver = nn.Linear(hidden_size, n_features) #nn.Linear(n_hidden, n_features)
+        self.agent_receiver = nn.Linear(receiver_hidden_size, n_features) #nn.Linear(n_hidden, n_features)
         self.receiver_cells = None
         self.receiver_num_layers = receiver_num_layers
-        self.receiver_norm_h = nn.LayerNorm(hidden_size)
-        self.receiver_norm_c = nn.LayerNorm(hidden_size)
+        self.receiver_norm_h = nn.LayerNorm(receiver_hidden_size)
+        self.receiver_norm_c = nn.LayerNorm(receiver_hidden_size)
         #self.hidden_to_output = nn.Linear(hidden_size, vocab_size)
         self.receiver_embedding = nn.Embedding(vocab_size, embed_dim)
 
@@ -980,7 +982,7 @@ class AgentBaseline2(nn.Module):
 
         cell_type = cell_types_r[receiver_cell]
         self.receiver_cell = cell_types_r[receiver_cell](input_size=embed_dim, batch_first=True,
-                               hidden_size=hidden_size, num_layers=receiver_num_layers)
+                               hidden_size=receiver_hidden_size, num_layers=receiver_num_layers)
         #self.receiver_cells = nn.ModuleList([
         #    cell_type(input_size=embed_dim, hidden_size=hidden_size) if i == 0 else \
         #    cell_type(input_size=hidden_size, hidden_size=hidden_size) for i in range(self.receiver_num_layers)])

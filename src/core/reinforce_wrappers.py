@@ -2201,7 +2201,8 @@ class DialogReinforce(nn.Module):
                  loss_imitation,
                  optim_params,
                  loss_weights,
-                 device):
+                 device,
+                 baseline_mode="new"):
         """
         optim_params={"length_cost":0.,
                       "sender_entropy_coeff_1":0.,
@@ -2222,7 +2223,7 @@ class DialogReinforce(nn.Module):
         self.loss_understanding = loss_understanding
         self.loss_message_imitation = loss_imitation
         self.loss_weights = loss_weights
-        self.baseline_mode="new"
+        self.baseline_mode=baseline_mode
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.device=device
@@ -2280,6 +2281,10 @@ class DialogReinforce(nn.Module):
         loss = self.loss_weights["self"]*loss_self + self.loss_weights["cross"]*loss_cross + self.loss_weights["imitation"]*loss_imitation
         loss /= (self.loss_weights["self"]+self.loss_weights["cross"]+self.loss_weights["imitation"])
 
+        # Reward
+        reward_self = -loss_self.detach()
+        reward_cross = -loss_cross.detach()
+
         "3. Entropy + length Regularization"
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
@@ -2310,8 +2315,9 @@ class DialogReinforce(nn.Module):
             policy_length_loss = ((length_loss.float() - self.mean_baseline['length_{}'.format(sender_id)]) * effective_log_prob_s).mean()
 
         elif self.baseline_mode=="new":
-            policy_loss_self = ((loss_self.detach() - loss_self.detach().mean())/(loss_self.detach().std()) * log_prob).mean()
-            policy_loss_cross = ((loss_cross.detach() - loss_cross.detach().mean())/(loss_cross.detach().std())  * log_prob).mean()
+
+            policy_loss_self = -((reward_self - reward_self.mean())/(reward_self.std()) * log_prob).mean()
+            policy_loss_cross = -((reward_cross - reward_cross.mean())/(reward_cross.std())  * log_prob).mean()
             policy_loss_imitation = ((loss_imitation.detach() - loss_imitation.detach().mean())  * log_prob).mean()
             policy_length_loss = ((length_loss.float() - length_loss.float().mean())  * effective_log_prob_s).mean()
 

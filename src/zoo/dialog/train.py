@@ -192,15 +192,15 @@ def loss_message_imitation(message,prob_reconstruction,message_lengths):
 
     # 1. len_mask selects only the symbols before EOS-token
     if message_lengths is not None:
-        to_onehot=torch.eye(message.size(1)).to("cuda")
-        to_onehot=torch.cat((to_onehot,torch.zeros((1,message.size(1))).to("cuda")),0)
+        to_onehot=torch.eye(message.size(1)).to(message.device)
+        to_onehot=torch.cat((to_onehot,torch.zeros((1,message.size(1))).to(message.device)),0)
         len_mask=[]
         for i in range(message_lengths.size(0)):
           len_mask.append(to_onehot[message_lengths[i]])
         len_mask=torch.stack(len_mask,dim=0)
 
         len_mask=torch.cumsum(len_mask,dim=1)
-        len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
+        len_mask=torch.ones(len_mask.size()).to(message.device).add_(-len_mask)
 
     # Reconstruction task
     batch_size=message.size(0)
@@ -1595,15 +1595,14 @@ def main(params):
         #optimizer_agent_1 = core.build_optimizer(list(game.agent_1.parameters())+receiver_2_parameters)
         #optimizer_agent_2 = core.build_optimizer(list(game.agent_2.parameters())+receiver_1_parameters)
         #optimizer = core.build_optimizer(list(game.parameters()))
-        optimizer_agent_1 = core.build_optimizer(list(game.parameters()))
-        optimizer_agent_2 = core.build_optimizer(list(game.parameters()))
+        optimizer = core.build_optimizer(list(game.parameters()))
 
 
 
         "Create trainer"
         #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
         #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
-        trainer = TrainerDialog(game=game, optimizer_agent_1=optimizer_agent_1,optimizer_agent_2=optimizer_agent_2, train_data=train_loader, \
+        trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
                                 validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
         "Prepare training"
@@ -1742,7 +1741,7 @@ def main(params):
             np.save(opts.dir_save+'/accuracy/11_accuracy_{}.npy'.format(epoch), acc_vec_11)
             np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
 
-    if opts.model=="expe_KL":
+    elif opts.model=="expe_KL":
 
         "Define agents"
 

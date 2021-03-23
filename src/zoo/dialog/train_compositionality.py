@@ -6,6 +6,7 @@
 import json
 import argparse
 import numpy as np
+import os
 import itertools
 import torch.utils.data
 import torch.nn.functional as F
@@ -17,9 +18,18 @@ from egg.zoo.channel.features import OneHotLoader, UniformLoader, OneHotLoaderCo
 from egg.zoo.channel.archs import Sender, Receiver
 from egg.core.reinforce_wrappers import RnnReceiverImpatient, RnnReceiverImpatientCompositionality, RnnReceiverCompositionality
 from egg.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce, CompositionalitySenderImpatientReceiverRnnReinforce, CompositionalitySenderReceiverRnnReinforce
-from egg.core.util import dump_sender_receiver_impatient, dump_sender_receiver_impatient_compositionality, dump_sender_receiver_compositionality
+from egg.core.util import dump_dialog_compositionality ,levenshtein, convert_messages_to_numpy
 
-from egg.core.trainers import CompoTrainer
+#Dialog
+from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
+from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3
+from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent,DialogReinforceModel6
+from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining_u,dump_sender_receiver_dialog_model_6
+from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
+
+# Compo
+from src.core.reinforce_wrappers import DialogReinforceCompositionality, AgentBaselineCompositionality
+from egg.core.trainers import CompoTrainer,TrainerDialogCompositionality
 
 
 def get_params(params):
@@ -93,55 +103,25 @@ def get_params(params):
                         help='Number of attributes (default: 2)')
     parser.add_argument('--n_values', type=int, default=3,
                         help='Number of values by attribute')
-    parser.add_argument('--att_weights', type=list, default=[1,1,1],
-                        help='Weights of each attribute')
     parser.add_argument('--probs_attributes', type=str, default="uniform",
                         help='Sampling prob for each att')
+
+    # Propre
+    parser.add_argument('--self_weight', type=float, default=1.,help='Weight for self')
+    parser.add_argument('--cross_weight', type=float, default=1.,help='Weight for cross')
+    parser.add_argument('--imitation_weight', type=float, default=1.,help='Weight for imitation')
+    parser.add_argument('--optim_mode', type=str, default="cross",help='Choice for losses')
+
+    # Baseline/reward mode
+    parser.add_argument('--reward_mode', type=str, default="neg_loss",help='Choice for reward')
+    parser.add_argument('--baseline_mode', type=str, default="new",help='Choice for baseline')
 
     args = core.init(parser, params)
 
     return args
 
 
-def loss(sender_input, _message, _receiver_input, receiver_output, _labels):
-    acc = (receiver_output.argmax(dim=1) == sender_input.argmax(dim=1)).detach().float()
-    loss = F.cross_entropy(receiver_output, sender_input.argmax(dim=1), reduction="none")
-    return loss, {'acc': acc}
-
-def loss_impatient(sender_input, _message, message_length, _receiver_input, receiver_output, _labels):
-
-    to_onehot=torch.eye(_message.size(1)).to("cuda")
-    to_onehot=torch.cat((to_onehot,torch.zeros((1,_message.size(1))).to("cuda")),0)
-    len_mask=[]
-    for i in range(message_length.size(0)):
-      len_mask.append(to_onehot[message_length[i]])
-    len_mask=torch.stack(len_mask,dim=0)
-
-    coef=(1/message_length.to(float)).repeat(_message.size(1),1).transpose(1,0)
-    coef2=coef*torch.arange(_message.size(1),0,-1).repeat(_message.size(0),1).to("cuda")
-
-    len_mask=torch.cumsum(len_mask,dim=1)
-    len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
-
-    len_mask.mul_((coef2))
-    len_mask.mul_((1/len_mask.sum(1)).repeat((_message.size(1),1)).transpose(1,0))
-
-    crible_acc=torch.zeros(size=_message.size()).to("cuda")
-    crible_loss=torch.zeros(size=_message.size()).to("cuda")
-
-    for i in range(receiver_output.size(1)):
-      crible_acc[:,i].add_((receiver_output[:,i,:].argmax(dim=1) == sender_input.argmax(dim=1)).detach().float())
-      crible_loss[:,i].add_(F.cross_entropy(receiver_output[:,i,:], sender_input.argmax(dim=1), reduction="none"))
-
-    acc=crible_acc*len_mask
-    loss=crible_loss*len_mask
-
-    acc = acc.sum(1)
-    loss= loss.sum(1)
-
-    return loss, {'acc': acc}, crible_acc
-
-def loss_compositionality(sender_input, _message, message_length, _receiver_input, receiver_output, _labels,n_attributes,n_values):
+def loss_understanding_compositionality(sender_input, receiver_output,n_attributes,n_values):
 
     loss=0.
 
@@ -150,127 +130,13 @@ def loss_compositionality(sender_input, _message, message_length, _receiver_inpu
     crible_acc=(receiver_output.argmax(dim=2)==sender_input.argmax(2)).detach().float().mean(1)
 
     for j in range(receiver_output.size(1)):
-        #K=10*(1/(j+1))
-        K=sender_input[:,j,:].max(dim=1).values
+        K=1/n_attributes
         loss+=K*F.cross_entropy(receiver_output[:,j,:], sender_input[:,j,:].argmax(dim=1), reduction="none")
 
     return loss, {'acc': crible_acc}, crible_acc
 
-def loss_impatient_compositionality(sender_input, _message, message_length, _receiver_input, receiver_output, _labels,n_attributes,n_values,att_weights):
+def dump_compositionality(game,n_attributes,n_values,device,epoch):
 
-    to_onehot=torch.eye(_message.size(1)).to("cuda")
-    to_onehot=torch.cat((to_onehot,torch.zeros((1,_message.size(1))).to("cuda")),0)
-    len_mask=[]
-    for i in range(message_length.size(0)):
-      len_mask.append(to_onehot[message_length[i]])
-    len_mask=torch.stack(len_mask,dim=0)
-
-    coef=(1/message_length.to(float)).repeat(_message.size(1),1).transpose(1,0)
-    #coef2=coef*torch.arange(_message.size(1),0,-1).repeat(_message.size(0),1).to("cuda")
-    coef2=coef
-    # NEW LOSS
-    #Mlen=n_attributes*torch.ones(message_length.size()).to("cuda")
-    #coef=(1/Mlen).repeat(_message.size(1),1).transpose(1,0)
-    #coef2=coef
-
-    len_mask=torch.cumsum(len_mask,dim=1)
-    len_mask=torch.ones(len_mask.size()).to("cuda").add_(-len_mask)
-
-    #len_mask.mul_((coef2)) # A priori avec la normalisation apres, etape useless
-    len_mask.mul_((1/len_mask.sum(1)).repeat((_message.size(1),1)).transpose(1,0))
-
-    crible_acc=torch.zeros(size=_message.size()).to("cuda")
-    crible_loss=torch.zeros(size=_message.size()).to("cuda")
-
-    for i in range(receiver_output.size(1)):
-      ro=receiver_output[:,i,:].reshape(receiver_output.size(0),n_attributes,n_values)
-      si=sender_input.reshape(sender_input.size(0),n_attributes,n_values)
-
-      crible_acc[:,i].add_((ro.argmax(dim=2)==si.argmax(2)).detach().float().sum(1)/n_attributes)
-
-      #crible_loss[:,i].add_(F.cross_entropy(receiver_output[:,i,:], sender_input.argmax(dim=1), reduction="none"))
-      for j in range(ro.size(1)):
-        #K=att_weights[j]
-        K=si[:,j,:].max(dim=1).values
-        crible_loss[:,i].add_(K*F.cross_entropy(ro[:,j,:], si[:,j,:].argmax(dim=1), reduction="none")/n_attributes)
-
-    acc=crible_acc*len_mask
-    loss=crible_loss*len_mask
-
-    acc = acc.sum(1)
-    loss= loss.sum(1)
-
-    return loss, {'acc': acc}, crible_acc
-
-def dump(game, n_features, device, gs_mode, epoch):
-    # tiny "dataset"
-    dataset = [[torch.eye(n_features).to(device), None]]
-
-    sender_inputs, messages, receiver_inputs, receiver_outputs, _ = \
-        core.dump_sender_receiver(game, dataset, gs=gs_mode, device=device, variable_length=True)
-
-    unif_acc = 0.
-    powerlaw_acc = 0.
-    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
-    powerlaw_probs /= powerlaw_probs.sum()
-
-    acc_vec=np.zeros(n_features)
-
-    for sender_input, message, receiver_output in zip(sender_inputs, messages, receiver_outputs):
-        input_symbol = sender_input.argmax()
-        output_symbol = receiver_output.argmax()
-        acc = (input_symbol == output_symbol).float().item()
-
-        acc_vec[int(input_symbol)]=acc
-
-        unif_acc += acc
-        powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%50==0:
-            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
-
-    unif_acc /= n_features
-
-    #print(f'Mean accuracy wrt uniform distribution is {unif_acc}')
-    #print(f'Mean accuracy wrt powerlaw distribution is {powerlaw_acc}')
-    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
-
-    return acc_vec, messages
-
-def dump_impatient(game, n_features, device, gs_mode,epoch):
-    # tiny "dataset"
-    dataset = [[torch.eye(n_features).to(device), None]]
-
-    sender_inputs, messages, receiver_inputs, receiver_outputs, _ = \
-        dump_sender_receiver_impatient(game, dataset, gs=gs_mode, device=device, variable_length=True)
-
-    unif_acc = 0.
-    powerlaw_acc = 0.
-    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
-    powerlaw_probs /= powerlaw_probs.sum()
-
-    acc_vec=np.zeros(n_features)
-
-    for sender_input, message, receiver_output in zip(sender_inputs, messages, receiver_outputs):
-        input_symbol = sender_input.argmax()
-        output_symbol = receiver_output.argmax()
-        acc = (input_symbol == output_symbol).float().item()
-
-        acc_vec[int(input_symbol)]=acc
-
-        unif_acc += acc
-        powerlaw_acc += powerlaw_probs[input_symbol] * acc
-        if epoch%25==0 or epoch>300:
-            print(f'input: {input_symbol.item()} -> message: {",".join([str(x.item()) for x in message])} -> output: {output_symbol.item()}', flush=True)
-
-    unif_acc /= n_features
-
-    #print(f'Mean accuracy wrt uniform distribution is {unif_acc}')
-    #print(f'Mean accuracy wrt powerlaw distribution is {powerlaw_acc}')
-    print(json.dumps({'powerlaw': powerlaw_acc, 'unif': unif_acc}))
-
-    return acc_vec, messages
-
-def dump_compositionality(game, n_attributes, n_values, device, gs_mode,epoch):
     # tiny "dataset"
     one_hots = torch.eye(n_values)
 
@@ -285,87 +151,134 @@ def dump_compositionality(game, n_attributes, n_values, device, gs_mode,epoch):
         new_input=torch.cat((new_input,one_hots[j]))
       dataset.append(new_input)
 
+    sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_11,receiver_outputs_12, \
+    sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_21,receiver_outputs_22, _ = \
+        dump_dialog_compositionality(game, dataset, gs=gs_mode, device=device, variable_length=True)
 
-    # ATTENTION ICI AJOUT JUSTE DES COMBINAISONS POUR DEUX ATTRIBUTES
-    #dataset.append(torch.cat((torch.zeros(n_values),torch.zeros(n_values))))
-    #combination.append((-1,-1))
 
-    #for j in range(n_values):
-    #  new_input=torch.cat((torch.zeros(n_values),one_hots[j]))
-    #  dataset.append(new_input)
-    #  combination.append((-1,j))
+    print("Language 1 (Agent 1 -> Agent 2)")
 
-    #for j in range(n_values):
-    #  new_input=torch.cat((one_hots[j],torch.zeros(n_values)))
-    #  dataset.append(new_input)
-    #  combination.append((j,-1))
-
-    dataset=torch.stack(dataset)
-
-    dataset=[[dataset,None]]
-
-    sender_inputs, messages, receiver_inputs, receiver_outputs, _ = \
-        dump_sender_receiver_compositionality(game, dataset, gs=gs_mode, device=device, variable_length=True)
+    "1->2"
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
 
     unif_acc = 0.
-    acc_vec=np.zeros(((n_values**n_attributes), n_attributes))
+    acc_vec_1=np.zeros(n_features)
 
-    for i in range(len(receiver_outputs)):
-      message=messages[i]
-      correct=True
-      if i<n_values**n_attributes:
-          for j in range(len(list(combination[i]))):
-            if receiver_outputs[i][j]==list(combination[i])[j]:
-              unif_acc+=1
-              acc_vec[i,j]=1
-      print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_12):
+
+        for i in range(len(receiver_outputs)):
+          message=messages[i]
+          correct=True
+          if i<n_values**n_attributes:
+              for j in range(len(list(combination[i]))):
+                if receiver_outputs[i][j]==list(combination[i])[j]:
+                  unif_acc+=1
+                  acc_vec_1[i,j]=1
+
+          if epoch%20==0:
+              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
 
     unif_acc /= (n_values**n_attributes) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
 
-    return acc_vec, messages
-
-def dump_impatient_compositionality(game, n_attributes, n_values, device, gs_mode,epoch):
-    # tiny "dataset"
-    one_hots = torch.eye(n_values)
-
-    val=np.arange(n_values)
-    combination=list(itertools.product(val,repeat=n_attributes))
-
-    dataset=[]
-
-    for i in range(len(combination)):
-      new_input=torch.zeros(0)
-      for j in combination[i]:
-        new_input=torch.cat((new_input,one_hots[j]))
-      dataset.append(new_input)
-
-    dataset=torch.stack(dataset)
-
-    dataset=[[dataset,None]]
-
-    sender_inputs, messages, receiver_inputs, receiver_outputs, _ = \
-        dump_sender_receiver_impatient_compositionality(game, dataset, gs=gs_mode, device=device, variable_length=True)
+    "1->1"
+    print("internal listener")
+    unif_acc = 0.
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
 
     unif_acc = 0.
-    acc_vec=np.zeros(((n_values**n_attributes), n_attributes))
+    acc_vec_11=np.zeros(((n_values**n_attributes), n_attributes))
 
-    for i in range(len(receiver_outputs)):
-      message=messages[i]
-      correct=True
-      for j in range(len(list(combination[i]))):
-        if receiver_outputs[i][j]==list(combination[i])[j]:
-          unif_acc+=1
-          acc_vec[i,j]=1
-      if epoch%5==0:
-          print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
+    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_11):
+
+        for i in range(len(receiver_outputs)):
+          message=messages[i]
+          correct=True
+          if i<n_values**n_attributes:
+              for j in range(len(list(combination[i]))):
+                if receiver_outputs[i][j]==list(combination[i])[j]:
+                  unif_acc+=1
+                  acc_vec_11[i,j]=1
+
+          if epoch%20==0:
+              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
 
     unif_acc /= (n_values**n_attributes) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
 
-    return acc_vec, messages
+    print("Language 2 (Agent 2 -> Agent 1)")
+
+    "2->1"
+
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    unif_acc = 0.
+    acc_vec_2=np.zeros(((n_values**n_attributes), n_attributes))
+
+    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_21):
+
+        for i in range(len(receiver_outputs)):
+          message=messages[i]
+          correct=True
+          if i<n_values**n_attributes:
+              for j in range(len(list(combination[i]))):
+                if receiver_outputs[i][j]==list(combination[i])[j]:
+                  unif_acc+=1
+                  acc_vec_2[i,j]=1
+
+          if epoch%20==0:
+              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
+
+    unif_acc /= (n_values**n_attributes) * n_attributes
+
+    print(json.dumps({'unif': unif_acc}))
+
+    print("internal listener")
+    powerlaw_acc = 0.
+    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+    powerlaw_probs /= powerlaw_probs.sum()
+
+    unif_acc = 0.
+    acc_vec_22=np.zeros(((n_values**n_attributes), n_attributes))
+
+    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_22):
+
+        for i in range(len(receiver_outputs)):
+          message=messages[i]
+          correct=True
+          if i<n_values**n_attributes:
+              for j in range(len(list(combination[i]))):
+                if receiver_outputs[i][j]==list(combination[i])[j]:
+                  unif_acc+=1
+                  acc_vec_22[i,j]=1
+
+          if epoch%20==0:
+              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
+
+    unif_acc /= (n_values**n_attributes) * n_attributes
+
+    print(json.dumps({'unif': unif_acc}))
+
+    similarity_messages=np.mean([levenshtein(messages_1[i],messages_2[i])/np.max([len(messages_1[i]),len(messages_2[i])]) for i in range(len(messages_1))])
+
+    print("Similarity between language = {}".format(similarity_messages),flush=True)
+
+    if past_messages_1 is not None:
+        print("Similarity evo language 1 = {}".format(np.mean([levenshtein(messages_1[i],past_messages_1[i]) for i in range(len(messages_1))])),flush=True)
+    if past_messages_2 is not None:
+        print("Similarity evo language 2 = {}".format(np.mean([levenshtein(messages_2[i],past_messages_2[i]) for i in range(len(messages_2))])),flush=True)
+
+
+    return messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages
 
 def main(params):
     print(torch.cuda.is_available())
@@ -413,85 +326,178 @@ def main(params):
     # single batches with 1s on the diag
     test_loader = TestLoaderCompositionality(n_values=opts.n_values,n_attributes=opts.n_attributes)
 
-    ### SENDER ###
 
-    sender = Sender(n_features=opts.n_attributes*opts.n_values, n_hidden=opts.sender_hidden)
+    agent_1=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
+                                            n_features=opts.n_features,
+                                            max_len=opts.max_len,
+                                            embed_dim=opts.sender_embedding,
+                                            sender_hidden_size=opts.sender_hidden,
+                                            receiver_hidden_size=opts.receiver_hidden,
+                                            sender_cell=opts.sender_cell,
+                                            receiver_cell=opts.receiver_cell,
+                                            sender_num_layers=opts.sender_num_layers,
+                                            receiver_num_layers=opts.receiver_num_layers,
+                                            force_eos=force_eos)
 
-    sender = core.RnnSenderReinforce(sender,opts.vocab_size, opts.sender_embedding, opts.sender_hidden,
-                                   cell=opts.sender_cell, max_len=opts.max_len, num_layers=opts.sender_num_layers,
-                                   force_eos=force_eos)
+    agent_2=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
+                                            n_features=opts.n_features,
+                                            max_len=opts.max_len,
+                                            embed_dim=opts.sender_embedding,
+                                            sender_hidden_size=opts.sender_hidden,
+                                            receiver_hidden_size=opts.receiver_hidden,
+                                            sender_cell=opts.sender_cell,
+                                            receiver_cell=opts.receiver_cell,
+                                            sender_num_layers=opts.sender_num_layers,
+                                            receiver_num_layers=opts.receiver_num_layers,
+                                            force_eos=force_eos)
 
 
-    ### RECEIVER ###
+    "Define game"
 
-    receiver = Receiver(n_features=opts.n_values, n_hidden=opts.receiver_hidden)
+    optim_params={"length_cost":0.,
+                  "sender_entropy_coeff_1":opts.sender_entropy_coeff,
+                  "receiver_entropy_coeff_1":opts.receiver_entropy_coeff,
+                  "sender_entropy_coeff_2":opts.sender_entropy_coeff,
+                  "receiver_entropy_coeff_2":opts.receiver_entropy_coeff}
 
-    if not opts.impatient:
-        receiver = Receiver(n_features=opts.n_features, n_hidden=opts.receiver_hidden)
-        receiver = RnnReceiverCompositionality(receiver, opts.vocab_size, opts.receiver_embedding,
-                                            opts.receiver_hidden, cell=opts.receiver_cell,
-                                            num_layers=opts.receiver_num_layers, max_len=opts.max_len, n_attributes=opts.n_attributes, n_values=opts.n_values)
+    if opts.optim_mode=="cross":
+        loss_weights={"self":0.,"cross":1.,"imitation":0.}
+    elif opts.optim_mode=="cross+self":
+        loss_weights={"self":1.,"cross":1.,"imitation":0.}
     else:
-        receiver = Receiver(n_features=opts.receiver_hidden, n_hidden=opts.vocab_size)
-        # If impatient 1
-        receiver = RnnReceiverImpatientCompositionality(receiver, opts.vocab_size, opts.receiver_embedding,
-                                            opts.receiver_hidden, cell=opts.receiver_cell,
-                                            num_layers=opts.receiver_num_layers, max_len=opts.max_len, n_attributes=opts.n_attributes, n_values=opts.n_values)
+        loss_weights={"self":1.,"cross":1.,"imitation":1.}
+    #loss_weights={"self":opts.self_weight,"cross":opts.cross_weight,"imitation":opts.imitation_weight}
+
+    game = DialogReinforceCompositionality(Agent_1=agent_1,
+                                            Agent_2=agent_2,
+                                            loss_understanding=loss_understanding,
+                                            loss_imitation=loss_message_imitation,
+                                            optim_params=optim_params,
+                                            baseline_mode=opts.baseline_mode,
+                                            reward_mode=opts.reward_mode,
+                                            loss_weights=loss_weights,
+                                            device=device)
+
+    "Create optimizers"
+    optimizer = core.build_optimizer(list(game.parameters()))
+
+    trainer = TrainerDialogCompositionality(n_attributes=opts.n_attributes,n_values=opts.n_values,game=game, optimizer=optimizer, train_data=train_loader,
+                                            validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
 
-    if not opts.impatient:
-        game = CompositionalitySenderReceiverRnnReinforce(sender, receiver, loss_compositionality, sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           n_attributes=opts.n_attributes,n_values=opts.n_values,receiver_entropy_coeff=opts.receiver_entropy_coeff,
-                                           length_cost=opts.length_cost,unigram_penalty=opts.unigram_pen,reg=opts.reg)
-    else:
-        game = CompositionalitySenderImpatientReceiverRnnReinforce(sender, receiver, loss_impatient_compositionality, sender_entropy_coeff=opts.sender_entropy_coeff,
-                                           n_attributes=opts.n_attributes,n_values=opts.n_values,att_weights=opts.att_weights,receiver_entropy_coeff=opts.receiver_entropy_coeff,
-                                           length_cost=opts.length_cost,unigram_penalty=opts.unigram_pen,reg=opts.reg)
+    # Create save dir
+    if not path.exists(opts.dir_save):
+        os.system("mkdir {}".format(opts.dir_save))
+        os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
 
-    optimizer = core.build_optimizer(game.parameters())
+    # Main losses
+    training_losses=[]
+    eval_losses=[]
+    training_entropy_1=[]
+    training_entropy_2=[]
+    training_loss_12=[]
+    eval_loss_12=[]
+    training_loss_21=[]
+    eval_loss_21=[]
 
-    trainer = CompoTrainer(n_attributes=opts.n_attributes,n_values=opts.n_values,game=game, optimizer=optimizer, train_data=train_loader,
-                           validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+    # Specific losses
+    training_loss_self_11=[]
+    training_loss_cross_12=[]
+    training_loss_imitation_12=[]
+    training_loss_self_22=[]
+    training_loss_cross_21=[]
+    training_loss_imitation_21=[]
+    eval_loss_self_11=[]
+    eval_loss_cross_12=[]
+    eval_loss_imitation_12=[]
+    eval_loss_self_22=[]
+    eval_loss_cross_21=[]
+    eval_loss_imitation_21=[]
 
-    curr_accs=[0]*7
+    # Linguistic
+    similarity_languages=[]
 
-    game.att_weights=[1]*(game.n_attributes)
 
     for epoch in range(int(opts.n_epochs)):
 
         print("Epoch: "+str(epoch))
 
-        #if epoch%100==0:
-        #  trainer.optimizer.defaults["lr"]/=2
+        # Train
+        list_train_loss,list_train_rest = trainer.train(n_epochs=1)
+
+        # Eval
+        eval_loss,eval_rest = trainer.eval()
+
+        # Store results
+        training_losses.append(list_train_loss[-1])
+        eval_losses.append(eval_loss)
+        training_entropy_1.append(list_train_rest[-1]["sender_entropy_1"])
+        training_entropy_2.append(list_train_rest[-1]["sender_entropy_2"])
+        training_loss_12.append(list_train_rest[-1]["loss_1"])
+        eval_loss_12.append(eval_rest["loss_1"])
+        training_loss_21.append(list_train_rest[-1]["loss_2"])
+        eval_loss_21.append(eval_rest["loss_2"])
+        training_loss_self_11.append(list_train_rest[-1]["loss_self_11"])
+        training_loss_cross_12.append(list_train_rest[-1]["loss_cross_12"])
+        #training_loss_imitation_12.append(list_train_rest[-1]["loss_imitation_12"])
+        training_loss_self_22.append(list_train_rest[-1]["loss_self_22"])
+        training_loss_cross_21.append(list_train_rest[-1]["loss_cross_21"])
+        #training_loss_imitation_21.append(list_train_rest[-1]["loss_imitation_21"])
+        eval_loss_self_11.append(eval_rest["loss_self_11"])
+        eval_loss_cross_12.append(eval_rest["loss_cross_12"])
+        #eval_loss_imitation_12.append(eval_rest["loss_imitation_12"])
+        eval_loss_self_22.append(eval_rest["loss_self_22"])
+        eval_loss_cross_21.append(eval_rest["loss_cross_21"])
+        #eval_loss_imitation_21.append(eval_rest["loss_imitation_21"])
+
+        if epoch==0:
+            messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+        messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_compositionality(trainer.game, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+        np_messages_1 = convert_messages_to_numpy(messages_1)
+        np_messages_2 = convert_messages_to_numpy(messages_2)
+        similarity_languages.append(similarity_messages)
+
+        #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
+        #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
 
 
-        trainer.train(n_epochs=1)
-        if opts.checkpoint_dir:
-            trainer.save_checkpoint(name=f'{opts.name}_vocab{opts.vocab_size}_rs{opts.random_seed}_lr{opts.lr}_shid{opts.sender_hidden}_rhid{opts.receiver_hidden}_sentr{opts.sender_entropy_coeff}_reg{opts.length_cost}_max_len{opts.max_len}')
+        # Save models
+        if epoch%20==0:
+            torch.save(agent_1.state_dict(), f"{opts.dir_save}/models/agent_1_weights_{epoch}.pth")
+            torch.save(agent_2.state_dict(), f"{opts.dir_save}/models/agent_2_weights_{epoch}.pth")
 
-        if not opts.impatient:
-            acc_vec,messages=dump_compositionality(trainer.game, opts.n_attributes, opts.n_values, device, False,epoch)
-        else:
-            acc_vec,messages=dump_impatient_compositionality(trainer.game, opts.n_attributes, opts.n_values, device, False,epoch)
+        # Save training info
+        if epoch%10==0:
+            np.save(opts.dir_save+'/training_info/training_loss_{}.npy'.format(epoch), training_losses)
+            np.save(opts.dir_save+'/training_info/eval_loss_{}.npy'.format(epoch), eval_losses)
+            np.save(opts.dir_save+'/training_info/training_entropy_1_{}.npy'.format(epoch), training_entropy_1)
+            np.save(opts.dir_save+'/training_info/training_entropy_2_{}.npy'.format(epoch), training_entropy_2)
+            np.save(opts.dir_save+'/training_info/training_loss_12_{}.npy'.format(epoch), training_loss_12)
+            np.save(opts.dir_save+'/training_info/eval_loss_12_{}.npy'.format(epoch), eval_loss_12)
+            np.save(opts.dir_save+'/training_info/training_loss_21_{}.npy'.format(epoch), training_loss_21)
+            np.save(opts.dir_save+'/training_info/eval_loss_21_{}.npy'.format(epoch), eval_loss_21)
+            np.save(opts.dir_save+'/training_info/training_loss_self_11_{}.npy'.format(epoch), training_loss_self_11)
+            np.save(opts.dir_save+'/training_info/training_loss_cross_12_{}.npy'.format(epoch), training_loss_cross_12)
+            np.save(opts.dir_save+'/training_info/training_loss_imitation_12_{}.npy'.format(epoch), training_loss_imitation_12)
+            np.save(opts.dir_save+'/training_info/training_loss_self_22_{}.npy'.format(epoch), training_loss_self_22)
+            np.save(opts.dir_save+'/training_info/training_loss_cross_21_{}.npy'.format(epoch), training_loss_cross_21)
+            np.save(opts.dir_save+'/training_info/training_loss_imitation_21_{}.npy'.format(epoch), training_loss_imitation_21)
+            np.save(opts.dir_save+'/training_info/eval_loss_self_11_{}.npy'.format(epoch), eval_loss_self_11)
+            np.save(opts.dir_save+'/training_info/eval_loss_cross_12_{}.npy'.format(epoch), eval_loss_cross_12)
+            np.save(opts.dir_save+'/training_info/eval_loss_imitation_12_{}.npy'.format(epoch), eval_loss_imitation_12)
+            np.save(opts.dir_save+'/training_info/eval_loss_self_22_{}.npy'.format(epoch), eval_loss_self_22)
+            np.save(opts.dir_save+'/training_info/eval_loss_cross_21_{}.npy'.format(epoch), eval_loss_cross_21)
+            np.save(opts.dir_save+'/training_info/eval_loss_imitation_21_{}.npy'.format(epoch), eval_loss_imitation_21)
+            np.save(opts.dir_save+'/training_info/similarity_languages_{}.npy'.format(epoch), similarity_languages)
 
-        print(acc_vec.mean(0))
-        #print(trainer.optimizer.defaults["lr"])
+        # Save accuracy/message results
+        np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), np_messages_1)
+        np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), np_messages_2)
+        np.save(opts.dir_save+'/accuracy/12_accuracy_{}.npy'.format(epoch), acc_vec_1)
+        np.save(opts.dir_save+'/accuracy/21_accuracy_{}.npy'.format(epoch), acc_vec_2)
+        np.save(opts.dir_save+'/accuracy/11_accuracy_{}.npy'.format(epoch), acc_vec_11)
+        np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
 
-
-        # ADDITION TO SAVE MESSAGES
-        all_messages=[]
-        for x in messages:
-            x = x.cpu().numpy()
-            all_messages.append(x)
-        all_messages = np.asarray(all_messages)
-
-        if epoch%50==0:
-            torch.save(sender.state_dict(), opts.dir_save+"/sender/sender_weights"+str(epoch)+".pth")
-            torch.save(receiver.state_dict(), opts.dir_save+"/receiver/receiver_weights"+str(epoch)+".pth")
-
-        np.save(opts.dir_save+'/messages/messages_'+str((epoch))+'.npy', all_messages)
-        np.save(opts.dir_save+'/accuracy/accuracy_'+str((epoch))+'.npy', acc_vec)
-        print(acc_vec.T)
 
     core.close()
 

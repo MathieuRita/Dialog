@@ -11,14 +11,14 @@ import itertools
 import torch.utils.data
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-import egg.core as core
+import src.core as core
 #from scipy.stats import entropy
-from egg.core import EarlyStopperAccuracy
-from egg.zoo.channel.features import OneHotLoader, UniformLoader, OneHotLoaderCompositionality, TestLoaderCompositionality
-from egg.zoo.channel.archs import Sender, Receiver
-from egg.core.reinforce_wrappers import RnnReceiverImpatient, RnnReceiverImpatientCompositionality, RnnReceiverCompositionality
-from egg.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce, CompositionalitySenderImpatientReceiverRnnReinforce, CompositionalitySenderReceiverRnnReinforce
-from egg.core.util import dump_dialog_compositionality ,levenshtein, convert_messages_to_numpy
+from src.core import EarlyStopperAccuracy
+from src.zoo.channel.features import OneHotLoader, UniformLoader, OneHotLoaderCompositionality, TestLoaderCompositionality
+from src.zoo.channel.archs import Sender, Receiver
+from src.core.reinforce_wrappers import RnnReceiverImpatient, RnnReceiverImpatientCompositionality, RnnReceiverCompositionality
+from src.core.reinforce_wrappers import SenderImpatientReceiverRnnReinforce, CompositionalitySenderImpatientReceiverRnnReinforce, CompositionalitySenderReceiverRnnReinforce
+from src.core.util import dump_dialog_compositionality ,levenshtein, convert_messages_to_numpy
 
 #Dialog
 from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderReinforceModel3
@@ -29,7 +29,7 @@ from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerD
 
 # Compo
 from src.core.reinforce_wrappers import DialogReinforceCompositionality, AgentBaselineCompositionality
-from egg.core.trainers import CompoTrainer,TrainerDialogCompositionality
+from src.core.trainers import CompoTrainer,TrainerDialogCompositionality
 
 
 def get_params(params):

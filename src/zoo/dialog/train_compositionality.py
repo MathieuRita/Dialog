@@ -172,7 +172,7 @@ def dump_compositionality(game,n_attributes,n_values,device, gs_mode, epoch,past
       correct=True
       if i<n_values**n_attributes:
           for j in range(len(list(combination[i]))):
-            if receiver_outputs[i][j]==list(combination[i])[j]:
+            if receiver_outputs_12[i][j]==list(combination[i])[j]:
               unif_acc+=1
               acc_vec_1[i,j]=1
 
@@ -196,7 +196,7 @@ def dump_compositionality(game,n_attributes,n_values,device, gs_mode, epoch,past
       correct=True
       if i<n_values**n_attributes:
           for j in range(len(list(combination[i]))):
-            if receiver_outputs[i][j]==list(combination[i])[j]:
+            if receiver_outputs_11[i][j]==list(combination[i])[j]:
               unif_acc+=1
               acc_vec_11[i,j]=1
 
@@ -220,7 +220,7 @@ def dump_compositionality(game,n_attributes,n_values,device, gs_mode, epoch,past
       correct=True
       if i<n_values**n_attributes:
           for j in range(len(list(combination[i]))):
-            if receiver_outputs[i][j]==list(combination[i])[j]:
+            if receiver_outputs_21[i][j]==list(combination[i])[j]:
               unif_acc+=1
               acc_vec_2[i,j]=1
 
@@ -242,7 +242,7 @@ def dump_compositionality(game,n_attributes,n_values,device, gs_mode, epoch,past
       correct=True
       if i<n_values**n_attributes:
           for j in range(len(list(combination[i]))):
-            if receiver_outputs[i][j]==list(combination[i])[j]:
+            if receiver_outputs_22[i][j]==list(combination[i])[j]:
               unif_acc+=1
               acc_vec_22[i,j]=1
 

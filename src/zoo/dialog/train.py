@@ -1969,7 +1969,7 @@ def main(params):
         trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
                                 validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
-        for epoch in range(int(opts.n_epochs)):
+        for epoch in range(int(opts.n_epochs),2*int(opts.n_epochs)):
 
             print("Epoch: {}".format(epoch))
 

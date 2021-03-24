@@ -1364,6 +1364,10 @@ class AgentBaselineCompositionality(nn.Module):
       for i in range(logits.size(1)):
         distr = Categorical(logits=logits[:,i,:])
         entropy.append(distr.entropy())
+        if self.training:
+            x = distr.sample()
+        else:
+            x = logits[:,i,:].argmax(dim=1)
         slogits.append(distr.log_prob(x))
 
       entropy = torch.stack(entropy).permute(1, 0)
@@ -2560,6 +2564,8 @@ class DialogReinforceCompositionality(nn.Module):
     def __init__(self,
                  Agent_1,
                  Agent_2,
+                 n_attributes,
+                 n_values,
                  loss_understanding,
                  optim_params,
                  loss_weights,
@@ -2582,6 +2588,8 @@ class DialogReinforceCompositionality(nn.Module):
         super(DialogReinforceCompositionality, self).__init__()
         self.agent_1 = Agent_1
         self.agent_2 = Agent_2
+        self.n_attributes=n_attributes
+        self.n_values=n_values
         self.optim_params = optim_params
         self.loss_understanding = loss_understanding
         self.loss_weights = loss_weights
@@ -2628,7 +2636,7 @@ class DialogReinforceCompositionality(nn.Module):
 
 
         "2. Losses computation"
-        loss_self, rest_self = self.loss_understanding(sender_input, receiver_output_cross,self.n_attributes,self.n_values)
+        loss_cross, rest_cross = self.loss_understanding(sender_input, receiver_output_cross,self.n_attributes,self.n_values)
 
         loss_self, rest_self = self.loss_understanding(sender_input, receiver_output_self,self.n_attributes,self.n_values)
 
@@ -2647,11 +2655,11 @@ class DialogReinforceCompositionality(nn.Module):
         "3. Entropy + length Regularization"
 
         # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
-        effective_entropy_s = torch.zeros_like(entropy_r_self)
+        effective_entropy_s = torch.zeros_like(entropy_r_self.mean(1))
 
         # the log prob of the choices made by S before and including the eos symbol - again, we don't
         # care about the rest
-        effective_log_prob_s = torch.zeros_like(log_prob_r_self)
+        effective_log_prob_s = torch.zeros_like(log_prob_r_self.mean(1))
 
 
         for i in range(message.size(1)):

@@ -7,6 +7,7 @@ import json
 import argparse
 import numpy as np
 import os
+from os import path
 import itertools
 import torch.utils.data
 import torch.nn.functional as F
@@ -133,9 +134,9 @@ def loss_understanding_compositionality(sender_input, receiver_output,n_attribut
         K=1/n_attributes
         loss+=K*F.cross_entropy(receiver_output[:,j,:], sender_input[:,j,:].argmax(dim=1), reduction="none")
 
-    return loss, {'acc': crible_acc}, crible_acc
+    return loss, {'acc': crible_acc}
 
-def dump_compositionality(game,n_attributes,n_values,device,epoch):
+def dump_compositionality(game,n_attributes,n_values,device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
 
     # tiny "dataset"
     one_hots = torch.eye(n_values)
@@ -151,6 +152,8 @@ def dump_compositionality(game,n_attributes,n_values,device,epoch):
         new_input=torch.cat((new_input,one_hots[j]))
       dataset.append(new_input)
 
+    dataset = [[torch.stack(dataset).to(device), None]]
+
     sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_11,receiver_outputs_12, \
     sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_21,receiver_outputs_22, _ = \
         dump_dialog_compositionality(game, dataset, gs=gs_mode, device=device, variable_length=True)
@@ -160,113 +163,96 @@ def dump_compositionality(game,n_attributes,n_values,device,epoch):
 
     "1->2"
     unif_acc = 0.
-    powerlaw_acc = 0.
-    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
-    powerlaw_probs /= powerlaw_probs.sum()
 
     unif_acc = 0.
-    acc_vec_1=np.zeros(n_features)
+    acc_vec_1=np.zeros(((n_values**n_attributes), n_attributes))
 
-    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_12):
+    for i in range(len(receiver_outputs_12)):
+      message=messages_1[i]
+      correct=True
+      if i<n_values**n_attributes:
+          for j in range(len(list(combination[i]))):
+            if receiver_outputs[i][j]==list(combination[i])[j]:
+              unif_acc+=1
+              acc_vec_1[i,j]=1
 
-        for i in range(len(receiver_outputs)):
-          message=messages[i]
-          correct=True
-          if i<n_values**n_attributes:
-              for j in range(len(list(combination[i]))):
-                if receiver_outputs[i][j]==list(combination[i])[j]:
-                  unif_acc+=1
-                  acc_vec_1[i,j]=1
-
-          if epoch%20==0:
-              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
+      if epoch%100==99:
+          print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_12[i]])}', flush=True)
 
     unif_acc /= (n_values**n_attributes) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
+    print(np.mean(acc_vec_1,axis=0))
 
     "1->1"
     print("internal listener")
     unif_acc = 0.
-    powerlaw_acc = 0.
-    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
-    powerlaw_probs /= powerlaw_probs.sum()
 
     unif_acc = 0.
     acc_vec_11=np.zeros(((n_values**n_attributes), n_attributes))
 
-    for sender_input, message, receiver_output in zip(sender_inputs_1, messages_1, receiver_outputs_11):
+    for i in range(len(receiver_outputs_11)):
+      message=messages_1[i]
+      correct=True
+      if i<n_values**n_attributes:
+          for j in range(len(list(combination[i]))):
+            if receiver_outputs[i][j]==list(combination[i])[j]:
+              unif_acc+=1
+              acc_vec_11[i,j]=1
 
-        for i in range(len(receiver_outputs)):
-          message=messages[i]
-          correct=True
-          if i<n_values**n_attributes:
-              for j in range(len(list(combination[i]))):
-                if receiver_outputs[i][j]==list(combination[i])[j]:
-                  unif_acc+=1
-                  acc_vec_11[i,j]=1
-
-          if epoch%20==0:
-              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
+      if epoch%100==99:
+          print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_11[i]])}', flush=True)
 
     unif_acc /= (n_values**n_attributes) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
+    print(np.mean(acc_vec_11,axis=0))
 
     print("Language 2 (Agent 2 -> Agent 1)")
 
     "2->1"
 
-    powerlaw_acc = 0.
-    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
-    powerlaw_probs /= powerlaw_probs.sum()
-
     unif_acc = 0.
     acc_vec_2=np.zeros(((n_values**n_attributes), n_attributes))
 
-    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_21):
+    for i in range(len(receiver_outputs_21)):
+      message=messages_2[i]
+      correct=True
+      if i<n_values**n_attributes:
+          for j in range(len(list(combination[i]))):
+            if receiver_outputs[i][j]==list(combination[i])[j]:
+              unif_acc+=1
+              acc_vec_2[i,j]=1
 
-        for i in range(len(receiver_outputs)):
-          message=messages[i]
-          correct=True
-          if i<n_values**n_attributes:
-              for j in range(len(list(combination[i]))):
-                if receiver_outputs[i][j]==list(combination[i])[j]:
-                  unif_acc+=1
-                  acc_vec_2[i,j]=1
-
-          if epoch%20==0:
-              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
+      if epoch%100==99:
+          print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_21[i]])}', flush=True)
 
     unif_acc /= (n_values**n_attributes) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
+    print(np.mean(acc_vec_2,axis=0))
 
     print("internal listener")
-    powerlaw_acc = 0.
-    powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
-    powerlaw_probs /= powerlaw_probs.sum()
 
     unif_acc = 0.
     acc_vec_22=np.zeros(((n_values**n_attributes), n_attributes))
 
-    for sender_input, message, receiver_output in zip(sender_inputs_2, messages_2, receiver_outputs_22):
+    for i in range(len(receiver_outputs_22)):
+      message=messages_2[i]
+      correct=True
+      if i<n_values**n_attributes:
+          for j in range(len(list(combination[i]))):
+            if receiver_outputs[i][j]==list(combination[i])[j]:
+              unif_acc+=1
+              acc_vec_22[i,j]=1
 
-        for i in range(len(receiver_outputs)):
-          message=messages[i]
-          correct=True
-          if i<n_values**n_attributes:
-              for j in range(len(list(combination[i]))):
-                if receiver_outputs[i][j]==list(combination[i])[j]:
-                  unif_acc+=1
-                  acc_vec_22[i,j]=1
-
-          if epoch%20==0:
-              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs[i]])}', flush=True)
+      if epoch%100==99:
+          print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_22[i]])}', flush=True)
 
     unif_acc /= (n_values**n_attributes) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
+    print(np.mean(acc_vec_22,axis=0))
 
     similarity_messages=np.mean([levenshtein(messages_1[i],messages_2[i])/np.max([len(messages_1[i]),len(messages_2[i])]) for i in range(len(messages_1))])
 
@@ -328,7 +314,8 @@ def main(params):
 
 
     agent_1=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
-                                            n_features=opts.n_features,
+                                            n_attributes=opts.n_attributes,
+                                            n_values=opts.n_values,
                                             max_len=opts.max_len,
                                             embed_dim=opts.sender_embedding,
                                             sender_hidden_size=opts.sender_hidden,
@@ -340,7 +327,8 @@ def main(params):
                                             force_eos=force_eos)
 
     agent_2=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
-                                            n_features=opts.n_features,
+                                            n_attributes=opts.n_attributes,
+                                            n_values=opts.n_values,
                                             max_len=opts.max_len,
                                             embed_dim=opts.sender_embedding,
                                             sender_hidden_size=opts.sender_hidden,
@@ -370,8 +358,9 @@ def main(params):
 
     game = DialogReinforceCompositionality(Agent_1=agent_1,
                                             Agent_2=agent_2,
-                                            loss_understanding=loss_understanding,
-                                            loss_imitation=loss_message_imitation,
+                                            n_attributes=opts.n_attributes,
+                                            n_values=opts.n_values,
+                                            loss_understanding=loss_understanding_compositionality,
                                             optim_params=optim_params,
                                             baseline_mode=opts.baseline_mode,
                                             reward_mode=opts.reward_mode,
@@ -451,7 +440,7 @@ def main(params):
         #eval_loss_imitation_21.append(eval_rest["loss_imitation_21"])
 
         if epoch==0:
-            messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+            messages_1=messages_2=np.zeros((opts.n_values**opts.n_attributes,opts.max_len))
         messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_compositionality(trainer.game, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
         np_messages_1 = convert_messages_to_numpy(messages_1)
         np_messages_2 = convert_messages_to_numpy(messages_2)

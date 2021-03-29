@@ -27,7 +27,7 @@ from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerD
 # Propre
 from src.core.reinforce_wrappers import AgentBaseline2,AgentSharedRNN,AgentSharedEmbedding,AgentBaselineKL,AgentPol
 from src.core.reinforce_wrappers import DialogReinforce,DialogReinforceBis,DialogReinforceKL,DialogReinforceMemory
-from src.core.trainers import TrainerDialog
+from src.core.trainers import TrainerDialog,TrainerDialogAsymLR
 
 def get_params(params):
     parser = argparse.ArgumentParser()
@@ -118,6 +118,10 @@ def get_params(params):
     # Baseline/reward mode
     parser.add_argument('--reward_mode', type=str, default="neg_loss",help='Choice for reward')
     parser.add_argument('--baseline_mode', type=str, default="new",help='Choice for baseline')
+
+    # Asymmetric lr
+    parser.add_argument('--sender_lr', type=float, default=0.0005,help='Lr for senders (for asymmetric expe)')
+    parser.add_argument('--receiver_lr', type=float, default=0.0005,help='Lr for receivers (for asymmetric expe)')
 
     args = core.init(parser, params)
 
@@ -2064,6 +2068,229 @@ def main(params):
             np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
 
 
+    if opts.model=="expe_lr":
+
+        "Define agents"
+
+
+        agent_1=AgentBaseline2(vocab_size=opts.vocab_size,
+                        n_features=opts.n_features,
+                        max_len=opts.max_len,
+                        embed_dim=opts.sender_embedding,
+                        sender_hidden_size=opts.sender_hidden,
+                        receiver_hidden_size=opts.receiver_hidden,
+                        sender_cell=opts.sender_cell,
+                        receiver_cell=opts.receiver_cell,
+                        sender_num_layers=opts.sender_num_layers,
+                        receiver_num_layers=opts.receiver_num_layers,
+                        force_eos=force_eos)
+
+        agent_2=AgentBaseline2(vocab_size=opts.vocab_size,
+                        n_features=opts.n_features,
+                        max_len=opts.max_len,
+                        embed_dim=opts.sender_embedding,
+                        sender_hidden_size=opts.sender_hidden,
+                        receiver_hidden_size=opts.receiver_hidden,
+                        sender_cell=opts.sender_cell,
+                        receiver_cell=opts.receiver_cell,
+                        sender_num_layers=opts.sender_num_layers,
+                        receiver_num_layers=opts.receiver_num_layers,
+                        force_eos=force_eos)
+
+
+        "Define game"
+
+        optim_params={"length_cost":0.,
+                      "sender_entropy_coeff_1":opts.sender_entropy_coeff,
+                      "receiver_entropy_coeff_1":opts.receiver_entropy_coeff,
+                      "sender_entropy_coeff_2":opts.sender_entropy_coeff,
+                      "receiver_entropy_coeff_2":opts.receiver_entropy_coeff}
+
+        if opts.optim_mode=="cross":
+            loss_weights={"self":0.,"cross":1.,"imitation":0.}
+        elif opts.optim_mode=="cross+self":
+            loss_weights={"self":1.,"cross":1.,"imitation":0.}
+        else:
+            loss_weights={"self":1.,"cross":1.,"imitation":1.}
+        #loss_weights={"self":opts.self_weight,"cross":opts.cross_weight,"imitation":opts.imitation_weight}
+
+        game = DialogReinforce(Agent_1=agent_1,
+                                Agent_2=agent_2,
+                                loss_understanding=loss_understanding,
+                                loss_imitation=loss_message_imitation,
+                                optim_params=optim_params,
+                                baseline_mode=opts.baseline_mode,
+                                reward_mode=opts.reward_mode,
+                                loss_weights=loss_weights,
+                                device=device)
+
+        speaker_parameters = list(game.agent_1.agent_sender.parameters()) + \
+                               list(game.agent_1.sender_norm_h.parameters()) + \
+                               list(game.agent_1.sender_norm_c.parameters()) + \
+                               list(game.agent_1.hidden_to_output.parameters()) + \
+                               list(game.agent_1.sender_embedding.parameters()) + \
+                               list(game.agent_1.sender_cells.parameters()) + \
+                               list(game.agent_2.agent_sender.parameters()) + \
+                               list(game.agent_2.sender_norm_h.parameters()) + \
+                               list(game.agent_2.sender_norm_c.parameters()) + \
+                               list(game.agent_2.hidden_to_output.parameters()) + \
+                               list(game.agent_2.sender_embedding.parameters()) + \
+                               list(game.agent_2.sender_cells.parameters())
+
+        listener_parameters = list(game.agent_1.agent_receiver.parameters()) + \
+                              list(game.agent_1.receiver_cell.parameters()) + \
+                              list(game.agent_1.receiver_embedding.parameters()) + \
+                              list(game.agent_2.agent_receiver.parameters()) + \
+                              list(game.agent_2.receiver_cell.parameters()) + \
+                              list(game.agent_2.receiver_embedding.parameters())
+
+        "Create optimizers"
+        optimizer_speaker = core.build_optimizer(list(speaker_parameters),lr=opts.sender_lr)
+        optimizer_listener = core.build_optimizer(list(listener_parameters),lr=opts.receiver_lr)
+
+
+
+        "Create trainer"
+        #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
+        #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+        trainer = TrainerDialogAsymLR(game=game, optimizer=optimizer, train_data=train_loader, \
+                                      validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+        "Prepare training"
+
+        # Create save dir
+        if not path.exists(opts.dir_save):
+            os.system("mkdir {}".format(opts.dir_save))
+            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
+
+        # Main losses
+        training_losses=[]
+        eval_losses=[]
+        training_entropy_1=[]
+        training_entropy_2=[]
+        training_loss_12=[]
+        eval_loss_12=[]
+        training_loss_21=[]
+        eval_loss_21=[]
+
+        # Specific losses
+        training_loss_self_11=[]
+        training_loss_cross_12=[]
+        training_loss_imitation_12=[]
+        training_loss_self_22=[]
+        training_loss_cross_21=[]
+        training_loss_imitation_21=[]
+        eval_loss_self_11=[]
+        eval_loss_cross_12=[]
+        eval_loss_imitation_12=[]
+        eval_loss_self_22=[]
+        eval_loss_cross_21=[]
+        eval_loss_imitation_21=[]
+
+        # REINFORCE
+        eval_reinforce_1=[]
+        eval_reinforce_2=[]
+        eval_baseline_1=[]
+        eval_baseline_2=[]
+
+        # Linguistic
+        similarity_languages=[]
+
+        "Train"
+
+        for epoch in range(int(opts.n_epochs)):
+
+            print("Epoch: {}".format(epoch))
+
+            # Train
+            list_train_loss,list_train_rest = trainer.train(n_epochs=1)
+
+            #print(list_train_rest[-1],flush=True)
+
+            # Eval
+            eval_loss,eval_rest = trainer.eval()
+
+            # Store results
+            training_losses.append(list_train_loss[-1])
+            eval_losses.append(eval_loss)
+            training_entropy_1.append(list_train_rest[-1]["sender_entropy_1"])
+            training_entropy_2.append(list_train_rest[-1]["sender_entropy_2"])
+            training_loss_12.append(list_train_rest[-1]["loss_1"])
+            eval_loss_12.append(eval_rest["loss_1"])
+            training_loss_21.append(list_train_rest[-1]["loss_2"])
+            eval_loss_21.append(eval_rest["loss_2"])
+            training_loss_self_11.append(list_train_rest[-1]["loss_self_11"])
+            training_loss_cross_12.append(list_train_rest[-1]["loss_cross_12"])
+            training_loss_imitation_12.append(list_train_rest[-1]["loss_imitation_12"])
+            training_loss_self_22.append(list_train_rest[-1]["loss_self_22"])
+            training_loss_cross_21.append(list_train_rest[-1]["loss_cross_21"])
+            training_loss_imitation_21.append(list_train_rest[-1]["loss_imitation_21"])
+            eval_loss_self_11.append(eval_rest["loss_self_11"])
+            eval_loss_cross_12.append(eval_rest["loss_cross_12"])
+            eval_loss_imitation_12.append(eval_rest["loss_imitation_12"])
+            eval_loss_self_22.append(eval_rest["loss_self_22"])
+            eval_loss_cross_21.append(eval_rest["loss_cross_21"])
+            eval_loss_imitation_21.append(eval_rest["loss_imitation_21"])
+            eval_reinforce_1.append(eval_rest["reinforce_term_1"])
+            eval_reinforce_2.append(eval_rest["reinforce_term_2"])
+            eval_baseline_1.append(eval_rest["baseline_term_1"])
+            eval_baseline_2.append(eval_rest["baseline_term_2"])
+
+            if epoch==0:
+                messages_1=messages_2=np.zeros((opts.n_features,opts.max_len))
+            messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_dialog_model_6(trainer.game, opts.n_features, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+            np_messages_1 = convert_messages_to_numpy(messages_1)
+            np_messages_2 = convert_messages_to_numpy(messages_2)
+            similarity_languages.append(similarity_messages)
+
+            #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
+            #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
+
+
+            # Save models
+            if epoch%20==0:
+                torch.save(agent_1.state_dict(), f"{opts.dir_save}/models/agent_1_weights_{epoch}.pth")
+                torch.save(agent_2.state_dict(), f"{opts.dir_save}/models/agent_2_weights_{epoch}.pth")
+
+            # Save training info
+            if epoch%10==0:
+                np.save(opts.dir_save+'/training_info/training_loss_{}.npy'.format(epoch), training_losses)
+                np.save(opts.dir_save+'/training_info/eval_loss_{}.npy'.format(epoch), eval_losses)
+                np.save(opts.dir_save+'/training_info/training_entropy_1_{}.npy'.format(epoch), training_entropy_1)
+                np.save(opts.dir_save+'/training_info/training_entropy_2_{}.npy'.format(epoch), training_entropy_2)
+                np.save(opts.dir_save+'/training_info/training_loss_12_{}.npy'.format(epoch), training_loss_12)
+                np.save(opts.dir_save+'/training_info/eval_loss_12_{}.npy'.format(epoch), eval_loss_12)
+                np.save(opts.dir_save+'/training_info/training_loss_21_{}.npy'.format(epoch), training_loss_21)
+                np.save(opts.dir_save+'/training_info/eval_loss_21_{}.npy'.format(epoch), eval_loss_21)
+                np.save(opts.dir_save+'/training_info/training_loss_self_11_{}.npy'.format(epoch), training_loss_self_11)
+                np.save(opts.dir_save+'/training_info/training_loss_cross_12_{}.npy'.format(epoch), training_loss_cross_12)
+                np.save(opts.dir_save+'/training_info/training_loss_imitation_12_{}.npy'.format(epoch), training_loss_imitation_12)
+                np.save(opts.dir_save+'/training_info/training_loss_self_22_{}.npy'.format(epoch), training_loss_self_22)
+                np.save(opts.dir_save+'/training_info/training_loss_cross_21_{}.npy'.format(epoch), training_loss_cross_21)
+                np.save(opts.dir_save+'/training_info/training_loss_imitation_21_{}.npy'.format(epoch), training_loss_imitation_21)
+                np.save(opts.dir_save+'/training_info/eval_loss_self_11_{}.npy'.format(epoch), eval_loss_self_11)
+                np.save(opts.dir_save+'/training_info/eval_loss_cross_12_{}.npy'.format(epoch), eval_loss_cross_12)
+                np.save(opts.dir_save+'/training_info/eval_loss_imitation_12_{}.npy'.format(epoch), eval_loss_imitation_12)
+                np.save(opts.dir_save+'/training_info/eval_loss_self_22_{}.npy'.format(epoch), eval_loss_self_22)
+                np.save(opts.dir_save+'/training_info/eval_loss_cross_21_{}.npy'.format(epoch), eval_loss_cross_21)
+                np.save(opts.dir_save+'/training_info/eval_loss_imitation_21_{}.npy'.format(epoch), eval_loss_imitation_21)
+                np.save(opts.dir_save+'/training_info/similarity_languages_{}.npy'.format(epoch), similarity_languages)
+                #Reinforce
+                np.save(opts.dir_save+'/training_info/reinforce_term_1_{}.npy'.format(epoch), eval_reinforce_1)
+                np.save(opts.dir_save+'/training_info/reinforce_term_2_{}.npy'.format(epoch), eval_reinforce_2)
+                np.save(opts.dir_save+'/training_info/baseline_term_1_{}.npy'.format(epoch), eval_baseline_1)
+                np.save(opts.dir_save+'/training_info/baseline_term_2_{}.npy'.format(epoch), eval_baseline_2)
+                # Policy
+                np.save(opts.dir_save+'/training_info/policy_1_{}.npy'.format(epoch),eval_rest["policy_1"].cpu().numpy())
+                np.save(opts.dir_save+'/training_info/policy_2_{}.npy'.format(epoch),eval_rest["policy_2"].cpu().numpy())
+
+            # Save accuracy/message results
+            np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), np_messages_1)
+            np.save(opts.dir_save+'/messages/agent_2_messages_{}.npy'.format(epoch), np_messages_2)
+            np.save(opts.dir_save+'/accuracy/12_accuracy_{}.npy'.format(epoch), acc_vec_1)
+            np.save(opts.dir_save+'/accuracy/21_accuracy_{}.npy'.format(epoch), acc_vec_2)
+            np.save(opts.dir_save+'/accuracy/11_accuracy_{}.npy'.format(epoch), acc_vec_11)
+            np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
 
     elif opts.model=="expe_KL":
 

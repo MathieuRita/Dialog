@@ -2153,7 +2153,7 @@ def main(params):
         "Create trainer"
         #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
         #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
-        trainer = TrainerDialogAsymLR(game=game, optimizer=optimizer, train_data=train_loader, \
+        trainer = TrainerDialogAsymLR(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener, train_data=train_loader, \
                                       validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
         "Prepare training"

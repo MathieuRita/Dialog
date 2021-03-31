@@ -1986,7 +1986,7 @@ def main(params):
 
         "Create optimizers"
         optimizer_speaker = core.build_optimizer(list(speaker_parameters),lr=0.)
-        optimizer_listener = core.build_optimizer(list(listener_parameters),lr=opts.listener_lr)
+        optimizer_listener = core.build_optimizer(list(listener_parameters),lr=opts.receiver_lr)
 
 
 

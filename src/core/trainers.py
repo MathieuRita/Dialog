@@ -909,15 +909,6 @@ class TrainerDialogAsymLR:
             for callback in self.callbacks:
                 callback.on_epoch_end(train_loss, train_rest)
 
-            #if self.validation_data is not None and self.validation_freq > 0 and epoch % self.validation_freq == 0:
-            #    for callback in self.callbacks:
-            #        callback.on_test_begin()
-            #    validation_loss, rest = self.eval()
-            #    for callback in self.callbacks:
-            #        callback.on_test_end(validation_loss, rest)
-
-            #if self.should_stop:
-            #    break
 
         for callback in self.callbacks:
             callback.on_train_end()

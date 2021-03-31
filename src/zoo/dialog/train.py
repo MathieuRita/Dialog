@@ -1964,14 +1964,35 @@ def main(params):
                                 loss_weights=loss_weights,
                                 device=device)
 
+        speaker_parameters = list(game.agent_1.agent_sender.parameters()) + \
+                               list(game.agent_1.sender_norm_h.parameters()) + \
+                               list(game.agent_1.sender_norm_c.parameters()) + \
+                               list(game.agent_1.hidden_to_output.parameters()) + \
+                               list(game.agent_1.sender_embedding.parameters()) + \
+                               list(game.agent_1.sender_cells.parameters()) + \
+                               list(game.agent_2.agent_sender.parameters()) + \
+                               list(game.agent_2.sender_norm_h.parameters()) + \
+                               list(game.agent_2.sender_norm_c.parameters()) + \
+                               list(game.agent_2.hidden_to_output.parameters()) + \
+                               list(game.agent_2.sender_embedding.parameters()) + \
+                               list(game.agent_2.sender_cells.parameters())
+
+        listener_parameters = list(game.agent_1.agent_receiver.parameters()) + \
+                              list(game.agent_1.receiver_cell.parameters()) + \
+                              list(game.agent_1.receiver_embedding.parameters()) + \
+                              list(game.agent_2.agent_receiver.parameters()) + \
+                              list(game.agent_2.receiver_cell.parameters()) + \
+                              list(game.agent_2.receiver_embedding.parameters())
+
         "Create optimizers"
-        optimizer = core.build_optimizer(list(game.parameters()))
+        optimizer_speaker = core.build_optimizer(list(speaker_parameters),lr=0.)
+        optimizer_listener = core.build_optimizer(list(listener_parameters),lr=opts.listener_lr)
 
 
 
         "Create trainer"
-        trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
-                                validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+        trainer = TrainerDialogAsymLR(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener, train_data=train_loader, \
+                                      validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
         for epoch in range(int(opts.n_epochs),2*int(opts.n_epochs)):
 

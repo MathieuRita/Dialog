@@ -808,8 +808,8 @@ def test_receiver_evolution(game,messages_test,device,gs_mode,past_preds_1,past_
     preds_2=[]
 
     for i in range(len(receiver_outputs_1)):
-        preds_1.append(receiver_outputs_1[i].argmax())
-        preds_2.append(receiver_outputs_2[i].argmax())
+        preds_1.append(receiver_outputs_1[i].argmax().cpu().numpy())
+        preds_2.append(receiver_outputs_2[i].argmax().cpu().numpy())
 
     sim_pred_1 = np.mean((np.array(preds_1)-np.array(past_preds_1))==0)
     sim_pred_2 = np.mean((np.array(preds_2)-np.array(past_preds_2))==0)
@@ -2391,6 +2391,23 @@ def main(params):
             np.save(opts.dir_save+'/preds/preds_2_{}.npy'.format(epoch), preds_2)
             np.save(opts.dir_save+'/preds/sim_pred_1_{}.npy'.format(epoch), similarity_predictions_1)
             np.save(opts.dir_save+'/preds/sim_pred_2_{}.npy'.format(epoch), similarity_predictions_2)
+
+            grads_listener=[]
+            for p in listener_parameters:
+              if p.grad is not None:
+                grads_listener.append(torch.norm(p.grad,p=2).cpu().float())
+
+            print("Grads listener = {}".format(np.mean(grads_listener)))
+            np.save(opts.dir_save+'/training_info/grads_listener_{}.npy'.format(epoch),np.mean(grads_listener))
+
+            grads_speaker=[]
+            for p in speaker_parameters:
+              if p.grad is not None:
+                grads_speaker.append(torch.norm(p.grad,p=2).cpu().float())
+
+            print("Grads speaker = {}".format(np.mean(grads_speaker)))
+            np.save(opts.dir_save+'/training_info/grads_speaker_{}.npy'.format(epoch),np.mean(grads_speaker))
+
 
     elif opts.model=="expe_KL":
 

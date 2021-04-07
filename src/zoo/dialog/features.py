@@ -203,7 +203,7 @@ class _OneHotIteratorCompositionality2:
             raise StopIteration()
 
         batch_data =[]
-        ids=np.randint(len(self.split),size=(self.batch_size))
+        ids=np.random.randint(len(self.split),size=(self.batch_size))
         for k in range(self.batch_size):
             batch_data.append(self.dataset[self.split[ids[k]]])
         batch_data=np.stack(batch_data)

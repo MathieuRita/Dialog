@@ -329,7 +329,7 @@ def main(params):
 
     compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
 
-    train_split = np.random.RandomState(opts.random_seed).randint(opts.n_values**opts.n_attributes,size=(int(opts.split_proportion*(opts.n_values**opts.n_attributes))))
+    train_split = np.random.RandomState(opts.random_seed).choice(opts.n_values**opts.n_attributes,size=(int(opts.split_proportion*(opts.n_values**opts.n_attributes))),replace=False)
     test_split=[]
 
     for j in range(opts.n_values**opts.n_attributes):

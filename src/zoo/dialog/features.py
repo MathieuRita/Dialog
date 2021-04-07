@@ -203,10 +203,11 @@ class _OneHotIteratorCompositionality2:
             raise StopIteration()
 
         batch_data =[]
-        for _ in range(self.batch_size):
-            batch_data.append(self.dataset[self.split[self.random_state.randint(len(self.split))]])
+        ids=self.random_state.randint(len(self.split),size=(self.batch_size))
+        for k in range(self.batch_size):
+            batch_data.append(self.dataset[self.split[ids[k]]])
         batch_data=np.stack(batch_data)
-        
+
         self.batches_generated += 1
         return torch.from_numpy(batch_data).float(), torch.zeros(1)
 

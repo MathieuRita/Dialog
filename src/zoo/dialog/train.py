@@ -798,11 +798,11 @@ def dump_dialog_model_6(game, n_features, device, gs_mode, epoch,past_messages_1
 
     return messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages
 
-def test_receiver_evolution(game,messages_test,device,past_preds_1,past_preds_2):
+def test_receiver_evolution(game,messages_test,device,gs_mode,past_preds_1,past_preds_2):
     # tiny "dataset"
 
     receiver_outputs_1,receiver_outputs_2 = \
-        test_receiver_evolution_core(game,messages_test, device=device, variable_length=True)
+        test_receiver_evolution_core(game,messages_test,gs=gs_mode, device=device, variable_length=True)
 
     preds_1=[]
     preds_2=[]
@@ -1676,7 +1676,7 @@ def main(params):
         similarity_predictions_1=[]
         similarity_predictions_2=[]
         nb_messages_test=10000
-        messages_test = np.random.randint(opts.vocab_size,size=(nb_messages_test,opts.max_len))
+        messages_test = torch.tensor(np.random.randint(opts.vocab_size,size=(nb_messages_test,opts.max_len)))
 
         "Train"
 
@@ -1727,7 +1727,7 @@ def main(params):
 
             if epoch==0:
                 preds_1=preds_2=np.zeros((np.shape(messages_test)[0]))
-            preds_1,preds_2,sim_pred_1,sim_pred_2 = test_receiver_evolution(trainer.game, messages_test, device,past_preds_1=preds_1,past_preds_2=preds_2)
+            preds_1,preds_2,sim_pred_1,sim_pred_2 = test_receiver_evolution(trainer.game, messages_test, device,False,past_preds_1=preds_1,past_preds_2=preds_2)
             similarity_predictions_1.append(sim_pred_1)
             similarity_predictions_2.append(sim_pred_2)
 
@@ -1814,7 +1814,7 @@ def main(params):
         # Create save dir
         if not path.exists(opts.dir_save):
             os.system("mkdir {}".format(opts.dir_save))
-            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
+            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy {}/preds".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
 
         # Main losses
         training_losses=[]
@@ -1848,6 +1848,13 @@ def main(params):
 
         # Linguistic
         similarity_languages=[]
+
+        "Prepare test"
+
+        similarity_predictions_1=[]
+        similarity_predictions_2=[]
+        nb_messages_test=10000
+        messages_test = torch.tensor(np.random.randint(opts.vocab_size,size=(nb_messages_test,opts.max_len)))
 
         "Pretraining "
 
@@ -1928,6 +1935,12 @@ def main(params):
             np_messages_2 = convert_messages_to_numpy(messages_2)
             similarity_languages.append(similarity_messages)
 
+            if epoch==0:
+                preds_1=preds_2=np.zeros((np.shape(messages_test)[0]))
+            preds_1,preds_2,sim_pred_1,sim_pred_2 = test_receiver_evolution(trainer.game, messages_test, device,False,past_preds_1=preds_1,past_preds_2=preds_2)
+            similarity_predictions_1.append(sim_pred_1)
+            similarity_predictions_2.append(sim_pred_2)
+
             #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
             #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
 
@@ -1976,6 +1989,10 @@ def main(params):
             np.save(opts.dir_save+'/accuracy/21_accuracy_{}.npy'.format(epoch), acc_vec_2)
             np.save(opts.dir_save+'/accuracy/11_accuracy_{}.npy'.format(epoch), acc_vec_11)
             np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
+            np.save(opts.dir_save+'/preds/preds_1_{}.npy'.format(epoch), preds_1)
+            np.save(opts.dir_save+'/preds/preds_2_{}.npy'.format(epoch), preds_2)
+            np.save(opts.dir_save+'/preds/sim_pred_1_{}.npy'.format(epoch), similarity_predictions_1)
+            np.save(opts.dir_save+'/preds/sim_pred_2_{}.npy'.format(epoch), similarity_predictions_2)
 
 
         print("Step 2 = Interaction",flush=True)
@@ -2074,6 +2091,12 @@ def main(params):
             np_messages_2 = convert_messages_to_numpy(messages_2)
             similarity_languages.append(similarity_messages)
 
+            if epoch==0:
+                preds_1=preds_2=np.zeros((np.shape(messages_test)[0]))
+            preds_1,preds_2,sim_pred_1,sim_pred_2 = test_receiver_evolution(trainer.game, messages_test, device,False,past_preds_1=preds_1,past_preds_2=preds_2)
+            similarity_predictions_1.append(sim_pred_1)
+            similarity_predictions_2.append(sim_pred_2)
+
             #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
             #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
 
@@ -2122,6 +2145,10 @@ def main(params):
             np.save(opts.dir_save+'/accuracy/21_accuracy_{}.npy'.format(epoch), acc_vec_2)
             np.save(opts.dir_save+'/accuracy/11_accuracy_{}.npy'.format(epoch), acc_vec_11)
             np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
+            np.save(opts.dir_save+'/preds/preds_1_{}.npy'.format(epoch), preds_1)
+            np.save(opts.dir_save+'/preds/preds_2_{}.npy'.format(epoch), preds_2)
+            np.save(opts.dir_save+'/preds/sim_pred_1_{}.npy'.format(epoch), similarity_predictions_1)
+            np.save(opts.dir_save+'/preds/sim_pred_2_{}.npy'.format(epoch), similarity_predictions_2)
 
 
     if opts.model=="expe_lr":
@@ -2217,7 +2244,7 @@ def main(params):
         # Create save dir
         if not path.exists(opts.dir_save):
             os.system("mkdir {}".format(opts.dir_save))
-            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
+            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy {}/preds".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
 
         # Main losses
         training_losses=[]
@@ -2251,6 +2278,13 @@ def main(params):
 
         # Linguistic
         similarity_languages=[]
+
+        "Prepare test"
+
+        similarity_predictions_1=[]
+        similarity_predictions_2=[]
+        nb_messages_test=10000
+        messages_test = torch.tensor(np.random.randint(opts.vocab_size,size=(nb_messages_test,opts.max_len)))
 
         "Train"
 
@@ -2298,6 +2332,12 @@ def main(params):
             np_messages_1 = convert_messages_to_numpy(messages_1)
             np_messages_2 = convert_messages_to_numpy(messages_2)
             similarity_languages.append(similarity_messages)
+
+            if epoch==0:
+                preds_1=preds_2=np.zeros((np.shape(messages_test)[0]))
+            preds_1,preds_2,sim_pred_1,sim_pred_2 = test_receiver_evolution(trainer.game, messages_test, device,False,past_preds_1=preds_1,past_preds_2=preds_2)
+            similarity_predictions_1.append(sim_pred_1)
+            similarity_predictions_2.append(sim_pred_2)
 
             #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
             #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
@@ -2347,6 +2387,10 @@ def main(params):
             np.save(opts.dir_save+'/accuracy/21_accuracy_{}.npy'.format(epoch), acc_vec_2)
             np.save(opts.dir_save+'/accuracy/11_accuracy_{}.npy'.format(epoch), acc_vec_11)
             np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
+            np.save(opts.dir_save+'/preds/preds_1_{}.npy'.format(epoch), preds_1)
+            np.save(opts.dir_save+'/preds/preds_2_{}.npy'.format(epoch), preds_2)
+            np.save(opts.dir_save+'/preds/sim_pred_1_{}.npy'.format(epoch), similarity_predictions_1)
+            np.save(opts.dir_save+'/preds/sim_pred_2_{}.npy'.format(epoch), similarity_predictions_2)
 
     elif opts.model=="expe_KL":
 

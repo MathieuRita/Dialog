@@ -1711,6 +1711,7 @@ def dump_sender_receiver_dialog_model_6(game: torch.nn.Module,
 def test_receiver_evolution_core(game: torch.nn.Module,
                                  messages:torch.tensor,
                                  device: Optional[torch.device] = None,
+                                 gs: bool = False,variable_length : bool = True,
                                  impatient = False):
     """
     A tool to dump the interaction between Sender and Receiver
@@ -1733,8 +1734,8 @@ def test_receiver_evolution_core(game: torch.nn.Module,
 
         message = move_to(messages, device) # size=[nb_messages,max_len]
 
-        output_1 = game.agent_1.receive_2(message, receiver_input, None)
-        output_2 = game.agent_2.receive_2(message, receiver_input, None)
+        output_1 = game.agent_1.receive_2(message, None, None)
+        output_2 = game.agent_2.receive_2(message, None, None)
 
         if not gs: output_1 = output_1[0]
         if not gs: output_2 = output_2[0]
@@ -1748,8 +1749,10 @@ def test_receiver_evolution_core(game: torch.nn.Module,
             # A trickier part is to handle EOS in the messages. It also might happen that not every message has EOS.
             # We cut messages at EOS if it is present or return the entire message otherwise. Note, EOS id is always
             # set to 0.
+            
+            messages=[]
 
-            for i in range(message_1.size(0)):
+            for i in range(message.size(0)):
                 eos_positions = (message[i, :] == 0).nonzero()
                 message_end = eos_positions[0].item() if eos_positions.size(0) > 0 else -1
                 assert message_end == -1 or message[i, message_end] == 0

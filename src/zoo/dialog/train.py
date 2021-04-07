@@ -2286,6 +2286,9 @@ def main(params):
         nb_messages_test=10000
         messages_test = torch.tensor(np.random.randint(opts.vocab_size,size=(nb_messages_test,opts.max_len)))
 
+        gradient_speaker=[]
+        gradient_listener=[]
+
         "Train"
 
         for epoch in range(int(opts.n_epochs)):
@@ -2394,19 +2397,31 @@ def main(params):
 
             grads_listener=[]
             for p in listener_parameters:
-              if p.grad is not None:
-                grads_listener.append(torch.norm(p.grad,p=2).cpu().float())
+              grads_listener.append(p.detach().cpu().numpy())
 
-            print("Grads listener = {}".format(np.mean(grads_listener)))
-            np.save(opts.dir_save+'/training_info/grads_listener_{}.npy'.format(epoch),np.mean(grads_listener))
 
             grads_speaker=[]
             for p in speaker_parameters:
-              if p.grad is not None:
-                grads_speaker.append(torch.norm(p.grad,p=2).cpu().float())
+              grads_speaker.append(p.detach().cpu().numpy())
 
-            print("Grads speaker = {}".format(np.mean(grads_speaker)))
-            np.save(opts.dir_save+'/training_info/grads_speaker_{}.npy'.format(epoch),np.mean(grads_speaker))
+            if epoch>0:
+              diff_grad_sp=[]
+              diff_grad_list=[]
+              for i in range(len(grads_speaker)):
+                diff_grad_sp.append(np.linalg.norm(grads_speaker[i]-ex_grads_speaker[i],2))
+
+              for i in range(len(grads_listener)):
+                diff_grad_list.append(np.linalg.norm(grads_listener[i]-ex_grads_listener[i],2))
+
+              print("Grads listener = {}".format(np.mean(diff_grad_list)))
+              gradient_listener.append(np.mean(diff_grad_list))
+              np.save(opts.dir_save+'/training_info/grads_listener_{}.npy'.format(epoch),gradient_listener)
+              print("Grads speaker = {}".format(np.mean(diff_grad_sp)))
+              gradient_speaker.append(np.mean(diff_grad_sp))
+              np.save(opts.dir_save+'/training_info/grads_speaker_{}.npy'.format(epoch),gradient_speaker)
+
+            ex_grads_speaker=grads_speaker
+            ex_grads_listener=grads_listener
 
 
     elif opts.model=="expe_KL":

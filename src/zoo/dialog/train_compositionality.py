@@ -117,6 +117,9 @@ def get_params(params):
     parser.add_argument('--reward_mode', type=str, default="neg_loss",help='Choice for reward')
     parser.add_argument('--baseline_mode', type=str, default="new",help='Choice for baseline')
 
+    # Split
+    parser.add_argument('--split_proportion', type=float, default=0.8,help='Train/test split prop')
+
     args = core.init(parser, params)
 
     return args
@@ -326,7 +329,7 @@ def main(params):
 
     compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
 
-    train_split = np.random.RandomState(opts.random_seed).randint(opts.n_values**opts.n_attributes,size=(int(0.8*(opts.n_values**opts.n_attributes))))
+    train_split = np.random.RandomState(opts.random_seed).randint(opts.n_values**opts.n_attributes,size=(int(opts.split_proportion*(opts.n_values**opts.n_attributes))))
     test_split=[]
 
     for j in range(opts.n_values**opts.n_attributes):
@@ -434,6 +437,7 @@ def main(params):
 
     # Linguistic
     similarity_languages=[]
+    similarity_languages_test=[]
 
 
     for epoch in range(int(opts.n_epochs)):

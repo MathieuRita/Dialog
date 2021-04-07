@@ -137,7 +137,7 @@ def loss_understanding_compositionality(sender_input, receiver_output,n_attribut
     return loss, {'acc': crible_acc}
 
 def build_compo_dataset(n_values,n_attributes):
-    one_hots = torch.eye(n_values)
+    one_hots = np.eye(n_values)
 
     val=np.arange(n_values)
     combination=list(itertools.product(val,repeat=n_attributes))
@@ -145,9 +145,9 @@ def build_compo_dataset(n_values,n_attributes):
     dataset=[]
 
     for i in range(len(combination)):
-      new_input=torch.zeros(0)
+      new_input=np.zeros(0)
       for j in combination[i]:
-        new_input=torch.cat((new_input,one_hots[j]))
+        new_input=np.concatenate((new_input,one_hots[j]))
       dataset.append(new_input)
 
     return dataset
@@ -326,10 +326,10 @@ def main(params):
 
     compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
 
-    train_split = np.random.RandomState(opts.seed).randint(opts.n_values**opts.n_attributes,size=(int(0.8*(opts.n_values**opts.n_attributes))))
+    train_split = np.random.RandomState(opts.random_seed).randint(opts.n_values**opts.n_attributes,size=(int(0.8*(opts.n_values**opts.n_attributes))))
     test_split=[]
 
-    for j in range(n_values**n_attributes):
+    for j in range(opts.n_values**opts.n_attributes):
       if j not in train_split:
         test_split.append(j)
     test_split = np.array(test_split)

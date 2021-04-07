@@ -202,10 +202,13 @@ class _OneHotIteratorCompositionality2:
         if self.batches_generated >= self.n_batches_per_epoch:
             raise StopIteration()
 
-        batch_data = self.dataset[self.split[self.random_state.randint(len(self.split))]]
-
+        batch_data =[]
+        for _ in range(self.batch_size):
+            batch_data.append(self.dataset[self.split[self.random_state.randint(len(self.split))]])
+        batch_data=np.stack(batch_data)
+        
         self.batches_generated += 1
-        return batch_data.float(), torch.zeros(1)
+        return torch.from_numpy(batch_data).float(), torch.zeros(1)
 
 class OneHotLoaderCompositionality(torch.utils.data.DataLoader):
     """

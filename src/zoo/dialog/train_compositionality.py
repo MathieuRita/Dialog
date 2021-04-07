@@ -136,9 +136,7 @@ def loss_understanding_compositionality(sender_input, receiver_output,n_attribut
 
     return loss, {'acc': crible_acc}
 
-def dump_compositionality(game,n_attributes,n_values,device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
-
-    # tiny "dataset"
+def build_compo_dataset(n_values,n_attributes):
     one_hots = torch.eye(n_values)
 
     val=np.arange(n_values)
@@ -151,6 +149,25 @@ def dump_compositionality(game,n_attributes,n_values,device, gs_mode, epoch,past
       for j in combination[i]:
         new_input=torch.cat((new_input,one_hots[j]))
       dataset.append(new_input)
+
+    return dataset
+
+def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
+
+    # tiny "dataset"
+    one_hots = torch.eye(n_values)
+
+    val=np.arange(n_values)
+    combination=list(itertools.product(val,repeat=n_attributes))
+
+    dataset=[]
+
+    for i in range(len(combination)):
+        if i in split:
+          new_input=torch.zeros(0)
+          for j in combination[i]:
+            new_input=torch.cat((new_input,one_hots[j]))
+          dataset.append(new_input)
 
     dataset = [[torch.stack(dataset).to(device), None]]
 
@@ -306,12 +323,24 @@ def main(params):
 
     print("Probability by attribute is:",probs_attributes)
 
-    train_loader = OneHotLoaderCompositionality(n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size*opts.n_attributes,
+
+    compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
+
+    train_split = np.random.RandomState(opts.seed).randint(opts.n_values**opts.n_attributes,size=(int(0.8*(opts.n_values**opts.n_attributes))))
+    test_split=[]
+
+    for j in range(n_values**n_attributes):
+      if j not in train_split:
+        test_split.append(j)
+    test_split = np.array(test_split)
+
+    train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size*opts.n_attributes,
                                                 batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
 
     # single batches with 1s on the diag
-    test_loader = TestLoaderCompositionality(n_values=opts.n_values,n_attributes=opts.n_attributes)
-
+    #test_loader = TestLoaderCompositionality(dataset=compo_dataset,n_values=opts.n_values,n_attributes=opts.n_attributes)
+    test_loader = TestLoaderCompositionality(dataset=compo_dataset,split=test_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size*opts.n_attributes,
+                                            batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
 
     agent_1=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
                                             n_attributes=opts.n_attributes,
@@ -439,12 +468,16 @@ def main(params):
         eval_loss_cross_21.append(eval_rest["loss_cross_21"])
         #eval_loss_imitation_21.append(eval_rest["loss_imitation_21"])
 
+        print("Train")
         if epoch==0:
             messages_1=messages_2=np.zeros((opts.n_values**opts.n_attributes,opts.max_len))
-        messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_compositionality(trainer.game, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+        messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_compositionality(trainer.game,train_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
         np_messages_1 = convert_messages_to_numpy(messages_1)
         np_messages_2 = convert_messages_to_numpy(messages_2)
         similarity_languages.append(similarity_messages)
+
+        _, _,_, _, _, _, _ = dump_compositionality(trainer.game,test_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+
 
         #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
         #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)

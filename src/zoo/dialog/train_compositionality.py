@@ -406,7 +406,7 @@ def main(params):
     # Create save dir
     if not path.exists(opts.dir_save):
         os.system("mkdir {}".format(opts.dir_save))
-        os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
+        os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy {}/test".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
 
     # Main losses
     training_losses=[]
@@ -476,8 +476,11 @@ def main(params):
         np_messages_2 = convert_messages_to_numpy(messages_2)
         similarity_languages.append(similarity_messages)
 
-        _, _,_, _, _, _, _ = dump_compositionality(trainer.game,test_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
-
+        print("Test")
+        messages_1_test, messages_2_test,acc_vec_1_test, acc_vec_2_test, acc_vec_11_test, acc_vec_22_test, similarity_messages_test = dump_compositionality(trainer.game,test_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+        np_messages_1_test = convert_messages_to_numpy(messages_1_test)
+        np_messages_2_test = convert_messages_to_numpy(messages_2_test)
+        similarity_languages_test.append(similarity_messages_test)
 
         #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
         #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
@@ -511,6 +514,7 @@ def main(params):
             np.save(opts.dir_save+'/training_info/eval_loss_cross_21_{}.npy'.format(epoch), eval_loss_cross_21)
             np.save(opts.dir_save+'/training_info/eval_loss_imitation_21_{}.npy'.format(epoch), eval_loss_imitation_21)
             np.save(opts.dir_save+'/training_info/similarity_languages_{}.npy'.format(epoch), similarity_languages)
+            np.save(opts.dir_save+'/training_info/similarity_languages_test_{}.npy'.format(epoch), similarity_languages_test)
 
         # Save accuracy/message results
         np.save(opts.dir_save+'/messages/agent_1_messages_{}.npy'.format(epoch), np_messages_1)
@@ -519,6 +523,14 @@ def main(params):
         np.save(opts.dir_save+'/accuracy/21_accuracy_{}.npy'.format(epoch), acc_vec_2)
         np.save(opts.dir_save+'/accuracy/11_accuracy_{}.npy'.format(epoch), acc_vec_11)
         np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
+
+        # Test set
+        np.save(opts.dir_save+'/test/agent_1_messages_test_{}.npy'.format(epoch), np_messages_1_test)
+        np.save(opts.dir_save+'/test/agent_2_messages_test_{}.npy'.format(epoch), np_messages_2_test)
+        np.save(opts.dir_save+'/test/12_accuracy_test_{}.npy'.format(epoch), acc_vec_1_test)
+        np.save(opts.dir_save+'/test/21_accuracy_test_{}.npy'.format(epoch), acc_vec_2_test)
+        np.save(opts.dir_save+'/test/11_accuracy_test_{}.npy'.format(epoch), acc_vec_11_test)
+        np.save(opts.dir_save+'/test/22_accuracy_test_{}.npy'.format(epoch), acc_vec_22_test)
 
 
     core.close()

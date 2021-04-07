@@ -1661,7 +1661,7 @@ def dump_sender_receiver_dialog_model_6(game: torch.nn.Module,
             if gs: message_2 = message_2.argmax(dim=-1)  # actual symbols instead of one-hot encoded
 
             if not variable_length:
-                messages_1.extend(message_2)
+                messages_1.extend(message_1)
                 receiver_outputs_11.extend(output_11)
                 receiver_outputs_12.extend(output_12)
                 messages_2.extend(message_2)
@@ -1707,6 +1707,67 @@ def dump_sender_receiver_dialog_model_6(game: torch.nn.Module,
     game.train(mode=train_state)
 
     return sender_inputs_1, messages_1, receiver_inputs_1, receiver_outputs_11,receiver_outputs_12, sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_21,receiver_outputs_22, labels
+
+def test_receiver_evolution_core(game: torch.nn.Module,
+                                 messages:torch.tensor,
+                                 device: Optional[torch.device] = None,
+                                 impatient = False):
+    """
+    A tool to dump the interaction between Sender and Receiver
+    :param game: A Game instance
+    :param dataset: Dataset of inputs to be used when analyzing the communication
+    :param gs: whether Gumbel-Softmax relaxation was used during training
+    :param variable_length: whether variable-length communication is used
+    :param device: device (e.g. 'cuda') to be used
+    :return:
+    """
+    train_state = game.training  # persist so we restore it back
+    game.eval()
+
+    device = device if device is not None else common_opts.device
+
+    receiver_outputs_1 = []
+    receiver_outputs_2 = []
+
+    with torch.no_grad():
+
+        message = move_to(messages, device) # size=[nb_messages,max_len]
+
+        output_1 = game.agent_1.receive_2(message, receiver_input, None)
+        output_2 = game.agent_2.receive_2(message, receiver_input, None)
+
+        if not gs: output_1 = output_1[0]
+        if not gs: output_2 = output_2[0]
+
+        if not variable_length:
+            messages.extend(message)
+            receiver_outputs_1.extend(output_1)
+            receiver_outputs_2.extend(output_2)
+
+        else:
+            # A trickier part is to handle EOS in the messages. It also might happen that not every message has EOS.
+            # We cut messages at EOS if it is present or return the entire message otherwise. Note, EOS id is always
+            # set to 0.
+
+            for i in range(message_1.size(0)):
+                eos_positions = (message[i, :] == 0).nonzero()
+                message_end = eos_positions[0].item() if eos_positions.size(0) > 0 else -1
+                assert message_end == -1 or message[i, message_end] == 0
+                if message_end < 0:
+                    messages.append(message[i, :])
+                else:
+                    messages.append(message[i, :message_end + 1])
+
+                if gs:
+                    receiver_outputs_1.append(output_1[i, message_end_1, ...])
+                    receiver_outputs_2.append(output_2[i, message_end_1, ...])
+                else:
+                    receiver_outputs_1.append(output_1[i, ...])
+                    receiver_outputs_2.append(output_2[i, ...])
+
+    game.train(mode=train_state)
+
+    return  receiver_outputs_1,receiver_outputs_2
 
 
 def dump_dialog_compositionality(game: torch.nn.Module,

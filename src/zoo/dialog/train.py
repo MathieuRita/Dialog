@@ -22,6 +22,7 @@ from src.core.reinforce_wrappers import RnnReceiverWithHiddenStates,RnnSenderRei
 from src.core.reinforce_wrappers import  AgentBaseline,AgentModel2,AgentModel3
 from src.core.reinforce_wrappers import DialogReinforceBaseline,DialogReinforceModel1,DialogReinforceModel2, DialogReinforceModel3,DialogReinforceModel4,PretrainAgent,DialogReinforceModel6
 from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialog_model_1,dump_sender_receiver_dialog_model_2,dump_pretraining_u,dump_sender_receiver_dialog_model_6
+from src.core.util import test_receiver_evolution_core
 from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
 
 # Propre
@@ -796,6 +797,27 @@ def dump_dialog_model_6(game, n_features, device, gs_mode, epoch,past_messages_1
 
 
     return messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages
+
+def test_receiver_evolution(game,messages_test,device,past_preds_1,past_preds_2):
+    # tiny "dataset"
+
+    receiver_outputs_1,receiver_outputs_2 = \
+        test_receiver_evolution_core(game,messages_test, device=device, variable_length=True)
+
+    preds_1=[]
+    preds_2=[]
+
+    for i in range(len(receiver_outputs_1)):
+        preds_1.append(receiver_outputs_1[i].argmax())
+        preds_2.append(receiver_outputs_2[i].argmax())
+
+    sim_pred_1 = np.mean((np.array(preds_1)-np.array(past_preds_1))==0)
+    sim_pred_2 = np.mean((np.array(preds_2)-np.array(past_preds_2))==0)
+
+    print("Similarity predictions 1 = {}".format(sim_pred_1))
+    print("Similarity predictions 2 = {}".format(sim_pred_2))
+
+    return preds_1,preds_2,sim_pred_1,sim_pred_2
 
 def dump_pretraining(game, n_features,pretrained_messages, device, gs_mode, epoch):
     # tiny "dataset"
@@ -1614,7 +1636,7 @@ def main(params):
         # Create save dir
         if not path.exists(opts.dir_save):
             os.system("mkdir {}".format(opts.dir_save))
-            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
+            os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy {}/preds".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
 
         # Main losses
         training_losses=[]
@@ -1648,6 +1670,13 @@ def main(params):
 
         # Linguistic
         similarity_languages=[]
+
+        "Prepare test"
+
+        similarity_predictions_1=[]
+        similarity_predictions_2=[]
+        nb_messages_test=10000
+        messages_test = np.random.randint(opts.vocab_size,size=(nb_messages_test,opts.max_len))
 
         "Train"
 
@@ -1696,9 +1725,11 @@ def main(params):
             np_messages_2 = convert_messages_to_numpy(messages_2)
             similarity_languages.append(similarity_messages)
 
-            #game.optim_params["sender_entropy_coeff_1"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_11)
-            #game.optim_params["sender_entropy_coeff_2"]=opts.sender_entropy_coeff-(opts.sender_entropy_coeff+0.05)*np.mean(acc_vec_22)
-
+            if epoch==0:
+                preds_1=preds_2=np.zeros((np.shape(messages_test)[0]))
+            preds_1,preds_2,sim_pred_1,sim_pred_2 = test_receiver_evolution(trainer.game, messages_test, device,past_preds_1=preds_1,past_preds_2=preds_2)
+            similarity_predictions_1.append(sim_pred_1)
+            similarity_predictions_2.append(sim_pred_2)
 
             # Save models
             if epoch%20==0:
@@ -1744,6 +1775,10 @@ def main(params):
             np.save(opts.dir_save+'/accuracy/21_accuracy_{}.npy'.format(epoch), acc_vec_2)
             np.save(opts.dir_save+'/accuracy/11_accuracy_{}.npy'.format(epoch), acc_vec_11)
             np.save(opts.dir_save+'/accuracy/22_accuracy_{}.npy'.format(epoch), acc_vec_22)
+            np.save(opts.dir_save+'/preds/preds_1_{}.npy'.format(epoch), preds_1)
+            np.save(opts.dir_save+'/preds/preds_2_{}.npy'.format(epoch), preds_2)
+            np.save(opts.dir_save+'/preds/sim_pred_1_{}.npy'.format(epoch), similarity_predictions_1)
+            np.save(opts.dir_save+'/preds/sim_pred_2_{}.npy'.format(epoch), similarity_predictions_2)
 
     elif opts.model=="expe_pretraining":
 

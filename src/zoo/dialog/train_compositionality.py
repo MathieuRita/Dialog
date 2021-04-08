@@ -178,6 +178,7 @@ def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoc
     sender_inputs_2, messages_2, receiver_inputs_2, receiver_outputs_21,receiver_outputs_22, _ = \
         dump_dialog_compositionality(game, dataset, gs=gs_mode, device=device, variable_length=True)
 
+    n_messages = len(dataset[0][0])
 
     print("Language 1 (Agent 1 -> Agent 2)")
 
@@ -185,12 +186,12 @@ def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoc
     unif_acc = 0.
 
     unif_acc = 0.
-    acc_vec_1=np.zeros(((n_values**n_attributes), n_attributes))
+    acc_vec_1=np.zeros(((n_messages), n_attributes))
 
     for i in range(len(receiver_outputs_12)):
       message=messages_1[i]
       correct=True
-      if i<n_values**n_attributes:
+      if i<n_messages:
           for j in range(len(list(combination[i]))):
             if receiver_outputs_12[i][j]==list(combination[i])[j]:
               unif_acc+=1
@@ -199,7 +200,7 @@ def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoc
       if epoch%100==99:
           print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_12[i]])}', flush=True)
 
-    unif_acc /= (n_values**n_attributes) * n_attributes
+    unif_acc /= (n_messages) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
     print(np.mean(acc_vec_1,axis=0))
@@ -209,12 +210,12 @@ def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoc
     unif_acc = 0.
 
     unif_acc = 0.
-    acc_vec_11=np.zeros(((n_values**n_attributes), n_attributes))
+    acc_vec_11=np.zeros(((n_messages), n_attributes))
 
     for i in range(len(receiver_outputs_11)):
       message=messages_1[i]
       correct=True
-      if i<n_values**n_attributes:
+      if i<n_messages:
           for j in range(len(list(combination[i]))):
             if receiver_outputs_11[i][j]==list(combination[i])[j]:
               unif_acc+=1
@@ -223,7 +224,7 @@ def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoc
       if epoch%100==99:
           print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_11[i]])}', flush=True)
 
-    unif_acc /= (n_values**n_attributes) * n_attributes
+    unif_acc /= (n_messages) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
     print(np.mean(acc_vec_11,axis=0))
@@ -233,12 +234,12 @@ def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoc
     "2->1"
 
     unif_acc = 0.
-    acc_vec_2=np.zeros(((n_values**n_attributes), n_attributes))
+    acc_vec_2=np.zeros(((n_messages), n_attributes))
 
     for i in range(len(receiver_outputs_21)):
       message=messages_2[i]
       correct=True
-      if i<n_values**n_attributes:
+      if i<n_messages:
           for j in range(len(list(combination[i]))):
             if receiver_outputs_21[i][j]==list(combination[i])[j]:
               unif_acc+=1
@@ -247,7 +248,7 @@ def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoc
       if epoch%100==99:
           print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_21[i]])}', flush=True)
 
-    unif_acc /= (n_values**n_attributes) * n_attributes
+    unif_acc /= (n_messages) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
     print(np.mean(acc_vec_2,axis=0))
@@ -255,12 +256,12 @@ def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoc
     print("internal listener")
 
     unif_acc = 0.
-    acc_vec_22=np.zeros(((n_values**n_attributes), n_attributes))
+    acc_vec_22=np.zeros(((n_messages), n_attributes))
 
     for i in range(len(receiver_outputs_22)):
       message=messages_2[i]
       correct=True
-      if i<n_values**n_attributes:
+      if i<n_messages:
           for j in range(len(list(combination[i]))):
             if receiver_outputs_22[i][j]==list(combination[i])[j]:
               unif_acc+=1
@@ -269,7 +270,7 @@ def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoc
       if epoch%100==99:
           print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_22[i]])}', flush=True)
 
-    unif_acc /= (n_values**n_attributes) * n_attributes
+    unif_acc /= (n_messages) * n_attributes
 
     print(json.dumps({'unif': unif_acc}))
     print(np.mean(acc_vec_22,axis=0))

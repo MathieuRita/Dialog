@@ -155,8 +155,15 @@ def build_compo_dataset(n_values,n_attributes):
 
     return dataset
 
-def dump_compositionality(game,dataset,split,n_attributes,n_values,device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
+def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
 
+    dataset=[]
+    combination=[]
+
+    for i in range(len(compo_dataset)):
+        if i in split:
+          dataset.append(torch.from_numpy(compo_dataset[i]).float())
+          combination.append(np.reshape(compo_dataset[i],(n_attributes,n_values)).argmax(1))
 
     dataset = [[torch.stack(dataset).to(device), None]]
 

@@ -482,7 +482,9 @@ def main(params):
         similarity_languages.append(similarity_messages)
 
         print("Test")
-        messages_1_test, messages_2_test,acc_vec_1_test, acc_vec_2_test, acc_vec_11_test, acc_vec_22_test, similarity_messages_test = dump_compositionality(trainer.game,test_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+        if epoch==0:
+            messages_1_test=messages_2_test=np.zeros((opts.n_values**opts.n_attributes,opts.max_len))
+        messages_1_test, messages_2_test,acc_vec_1_test, acc_vec_2_test, acc_vec_11_test, acc_vec_22_test, similarity_messages_test = dump_compositionality(trainer.game,test_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1_test,past_messages_2=messages_2_test)
         np_messages_1_test = convert_messages_to_numpy(messages_1_test)
         np_messages_2_test = convert_messages_to_numpy(messages_2_test)
         similarity_languages_test.append(similarity_messages_test)

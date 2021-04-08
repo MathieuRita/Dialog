@@ -155,22 +155,8 @@ def build_compo_dataset(n_values,n_attributes):
 
     return dataset
 
-def dump_compositionality(game,split,n_attributes,n_values,device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
+def dump_compositionality(game,dataset,split,n_attributes,n_values,device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
 
-    # tiny "dataset"
-    one_hots = torch.eye(n_values)
-
-    val=np.arange(n_values)
-    combination=list(itertools.product(val,repeat=n_attributes))
-
-    dataset=[]
-
-    for i in range(len(combination)):
-        if i in split:
-          new_input=torch.zeros(0)
-          for j in combination[i]:
-            new_input=torch.cat((new_input,one_hots[j]))
-          dataset.append(new_input)
 
     dataset = [[torch.stack(dataset).to(device), None]]
 
@@ -476,7 +462,7 @@ def main(params):
         print("Train")
         if epoch==0:
             messages_1=messages_2=np.zeros((opts.n_values**opts.n_attributes,opts.max_len))
-        messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_compositionality(trainer.game,train_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+        messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_compositionality(trainer.game,compo_dataset,train_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
         np_messages_1 = convert_messages_to_numpy(messages_1)
         np_messages_2 = convert_messages_to_numpy(messages_2)
         similarity_languages.append(similarity_messages)
@@ -484,7 +470,7 @@ def main(params):
         print("Test")
         if epoch==0:
             messages_1_test=messages_2_test=np.zeros((opts.n_values**opts.n_attributes,opts.max_len))
-        messages_1_test, messages_2_test,acc_vec_1_test, acc_vec_2_test, acc_vec_11_test, acc_vec_22_test, similarity_messages_test = dump_compositionality(trainer.game,test_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1_test,past_messages_2=messages_2_test)
+        messages_1_test, messages_2_test,acc_vec_1_test, acc_vec_2_test, acc_vec_11_test, acc_vec_22_test, similarity_messages_test = dump_compositionality(trainer.game,compo_dataset,test_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1_test,past_messages_2=messages_2_test)
         np_messages_1_test = convert_messages_to_numpy(messages_1_test)
         np_messages_2_test = convert_messages_to_numpy(messages_2_test)
         similarity_languages_test.append(similarity_messages_test)

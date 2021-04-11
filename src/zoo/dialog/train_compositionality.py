@@ -177,8 +177,7 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
 
     "1->2"
     unif_acc = 0.
-
-    unif_acc = 0.
+    unif_acc_general=0.
     acc_vec_1=np.zeros(((n_messages), n_attributes))
 
     for i in range(len(receiver_outputs_12)):
@@ -189,20 +188,25 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
             if receiver_outputs_12[i][j]==list(combination[i])[j]:
               unif_acc+=1
               acc_vec_1[i,j]=1
+            else:
+              correct=False
+          if correct:
+            unif_acc_general+=1.
 
       if epoch%100==99:
           print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_12[i]])}', flush=True)
 
     unif_acc /= (n_messages) * n_attributes
+    unif_acc_general/=n_messages
 
-    print(json.dumps({'unif': unif_acc}))
+    print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
+
     print(np.mean(acc_vec_1,axis=0))
 
     "1->1"
     print("internal listener")
     unif_acc = 0.
-
-    unif_acc = 0.
+    unif_acc_general=0.
     acc_vec_11=np.zeros(((n_messages), n_attributes))
 
     for i in range(len(receiver_outputs_11)):
@@ -213,13 +217,20 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
             if receiver_outputs_11[i][j]==list(combination[i])[j]:
               unif_acc+=1
               acc_vec_11[i,j]=1
+            else:
+              correct=False
+
+          if correct:
+            unif_acc_general+=1.
 
       if epoch%100==99:
           print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_11[i]])}', flush=True)
 
     unif_acc /= (n_messages) * n_attributes
+    unif_acc_general/=n_messages
 
-    print(json.dumps({'unif': unif_acc}))
+    print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
+
     print(np.mean(acc_vec_11,axis=0))
 
     print("Language 2 (Agent 2 -> Agent 1)")
@@ -227,6 +238,7 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
     "2->1"
 
     unif_acc = 0.
+    unif_acc_general=0.
     acc_vec_2=np.zeros(((n_messages), n_attributes))
 
     for i in range(len(receiver_outputs_21)):
@@ -237,18 +249,25 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
             if receiver_outputs_21[i][j]==list(combination[i])[j]:
               unif_acc+=1
               acc_vec_2[i,j]=1
+            else:
+              correct=False
+
+          if correct:
+            unif_acc_general+=1.
 
       if epoch%100==99:
           print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_21[i]])}', flush=True)
 
     unif_acc /= (n_messages) * n_attributes
+    unif_acc_general/=n_messages
 
-    print(json.dumps({'unif': unif_acc}))
+    print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
     print(np.mean(acc_vec_2,axis=0))
 
     print("internal listener")
 
     unif_acc = 0.
+    unif_acc_general=0.
     acc_vec_22=np.zeros(((n_messages), n_attributes))
 
     for i in range(len(receiver_outputs_22)):
@@ -259,13 +278,19 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
             if receiver_outputs_22[i][j]==list(combination[i])[j]:
               unif_acc+=1
               acc_vec_22[i,j]=1
+            else:
+              correct=False
+
+          if correct:
+            unif_acc_general+=1.
 
       if epoch%100==99:
           print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_22[i]])}', flush=True)
 
     unif_acc /= (n_messages) * n_attributes
+    unif_acc_general/=n_messages
 
-    print(json.dumps({'unif': unif_acc}))
+    print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
     print(np.mean(acc_vec_22,axis=0))
 
     similarity_messages=np.mean([levenshtein(messages_1[i],messages_2[i])/np.max([len(messages_1[i]),len(messages_2[i])]) for i in range(len(messages_1))])

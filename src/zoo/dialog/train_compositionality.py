@@ -131,11 +131,10 @@ def loss_understanding_compositionality(sender_input, receiver_output,n_attribut
 
     sender_input=sender_input.reshape(sender_input.size(0),n_attributes,n_values)
 
-    crible_acc=(receiver_output.argmax(dim=2)==sender_input.argmax(2)).detach().float().mean(1)
+    crible_acc=(receiver_output.argmax(dim=2)==sender_input.argmax(2)).detach().float()
 
     for j in range(receiver_output.size(1)):
-        K=1/n_attributes
-        loss+=K*F.cross_entropy(receiver_output[:,j,:], sender_input[:,j,:].argmax(dim=1), reduction="none")
+        loss+=F.cross_entropy(receiver_output[:,j,:], sender_input[:,j,:].argmax(dim=1), reduction="none")
 
     return loss, {'acc': crible_acc}
 
@@ -356,12 +355,12 @@ def main(params):
         test_split.append(j)
     test_split = np.array(test_split)
 
-    train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size*opts.n_attributes,
+    train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
                                                 batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
 
     # single batches with 1s on the diag
     #test_loader = TestLoaderCompositionality(dataset=compo_dataset,n_values=opts.n_values,n_attributes=opts.n_attributes)
-    test_loader = TestLoaderCompositionality(dataset=compo_dataset,split=test_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size*opts.n_attributes,
+    test_loader = TestLoaderCompositionality(dataset=compo_dataset,split=test_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
                                             batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
 
     agent_1=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
@@ -429,6 +428,11 @@ def main(params):
     if not path.exists(opts.dir_save):
         os.system("mkdir {}".format(opts.dir_save))
         os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy {}/test".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
+
+    # Save train split
+    np.save(opts.dir_save+'/training_info/train_split.npy', train_split)
+    np.save(opts.dir_save+'/training_info/test_split.npy', test_split)
+
 
     # Main losses
     training_losses=[]

@@ -2651,6 +2651,9 @@ class DialogReinforceCompositionality(nn.Module):
         elif self.reward_mode=="proba":
             reward_self = torch.exp(-loss_self.detach())
             reward_cross = torch.exp(-loss_cross.detach())
+        elif self.reward_mode=="dense":
+            reward_self = 1.*(rest_self["acc"].sum(1)==self.n_attributes).detach()
+            reward_cross = 1.*(rest_cross["acc"].sum(1)==self.n_attributes).detach()
 
         "3. Entropy + length Regularization"
 

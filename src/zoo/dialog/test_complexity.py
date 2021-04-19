@@ -9,6 +9,7 @@ import numpy as np
 import os
 from os import path
 import itertools
+import collections
 import torch.utils.data
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -124,6 +125,10 @@ def get_params(params):
     # Test
     parser.add_argument('--agent_weights', type=str,help='Path to agent weights')
     parser.add_argument('--train_split', type=str,help='Path to agent weights')
+    parser.add_argument('--compositionality', type=bool,default=False,help='Compositionality game ?')
+    parser.add_argument('--n_sampling', type=int,default=1000,help='Number of message sampling for estimation')
+    parser.add_argument('--train_split', type=str,help='Path to the train split')
+    parser.add_argument('--test_split', type=str,help='Path to test split')
 
 
     args = core.init(parser, params)
@@ -152,7 +157,7 @@ def compute_complexity_compositionality(agent,
                                         n_attributes,
                                         n_values,
                                         n_sampling,
-                                        device
+                                        device,
                                         meanings_distribution="uniform",
                                         ):
 
@@ -174,8 +179,47 @@ def compute_complexity_compositionality(agent,
 
     dataset = [[torch.stack(dataset).to(device), None]]
 
+    q_w_m={}
+    set_of_words=[]
+
     # 1. Estimate q(w|m) via sampling
-    messages = sample_messages(agent,compo_dataset)
+    sampling_inventory={j:[] for j in range(len(combination))}
+    for _ in range(opts.n_sampling):
+      messages = sample_messages(agent,dataset,device)
+      for i in range(len(messages)):
+        m=[str(sym) for sym in messages[i].to("cpu").numpy()]
+        m="".join(m)
+        sampling_inventory[i].append(m)
+
+    for k in sampling_inventory:
+      frequency = dict(collections.Counter(sampling_inventory[k]))
+      for word in frequency:
+        frequency[word]/=opts.n_sampling
+        set_of_words.append(word)
+
+      q_w_m[k]=frequency
+
+    set_of_words=list(set(set_of_words))
+
+    # 2. Estimate q(w)
+    q_w={}
+    for word in set_of_words:
+      q_word=0.
+      for k in q_w_m:
+        if word in q_w_m[k]:
+          q_word+=( 1/len(q_w_m) * q_w_m[k][word])
+      q_w[word]=q_word
+
+    # 3. Compute complexity \sum_{m,w} p(m)q(w|m)log(q(w|m)/q(w))
+
+    complexity = 0.
+
+    for k in q_w_m:
+        for word in q_w_m[k]:
+            complexity += 1/len(q_w_m) * q_w_m[k][word] * np.log(q_w_m[k][word]/q_w[word])
+
+    return complexity
+
 
 
 
@@ -187,12 +231,20 @@ def main(params):
 
     force_eos = opts.force_eos == 1
 
+    if opts.probs=="uniform":
+        probs=[]
+        probs_by_att = np.ones(opts.n_values)
+        probs_by_att /= probs_by_att.sum()
+        for i in range(opts.n_attributes):
+            probs.append(probs_by_att)
+        probs_attributes=[1]*opts.n_attributes
+
     if opts.compositionality:
 
         compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
 
-        train_split = #######
-        test_split= ######
+        train_split = np.load(opts.train_split)
+        test_split= np.load(opts.test_split)
 
 
         train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
@@ -217,8 +269,9 @@ def main(params):
                                                 force_eos=force_eos)
 
         agent_1.load_state_dict(torch.load(opts.agent_weights,map_location=torch.device('cpu')))
+        agent_1.to(device)
 
-        complexity = compute_complexity_compositionality(agent_1,compo_dataset,test_split,opts.n_attributes, opts.n_values, device, False)
+        complexity = compute_complexity_compositionality(agent_1,compo_dataset,test_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
 
 
     core.close()

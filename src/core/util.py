@@ -1942,8 +1942,6 @@ def sample_messages(agent: torch.nn.Module,
     :param device: device (e.g. 'cuda') to be used
     :return:
     """
-    train_state = game.training  # persist so we restore it back
-    game.eval()
 
     device = device if device is not None else common_opts.device
 
@@ -1953,7 +1951,7 @@ def sample_messages(agent: torch.nn.Module,
             sender_input = move_to(batch[0], device)
             receiver_input = None if len(batch) == 2 else move_to(batch[2], device)
 
-            message_1 = agent.send(sender_input,eval=True)
+            message_1 = agent.send(sender_input,eval=False)
             message_1 = message_1[0]
 
     return message_1

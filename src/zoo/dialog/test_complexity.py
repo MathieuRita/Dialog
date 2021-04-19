@@ -184,7 +184,7 @@ def compute_complexity_compositionality(agent,
 
     # 1. Estimate q(w|m) via sampling
     sampling_inventory={j:[] for j in range(len(combination))}
-    for _ in range(opts.n_sampling):
+    for _ in range(n_sampling):
       messages = sample_messages(agent,dataset,device)
       for i in range(len(messages)):
         m=[str(sym) for sym in messages[i].to("cpu").numpy()]
@@ -194,7 +194,7 @@ def compute_complexity_compositionality(agent,
     for k in sampling_inventory:
       frequency = dict(collections.Counter(sampling_inventory[k]))
       for word in frequency:
-        frequency[word]/=opts.n_sampling
+        frequency[word]/=n_sampling
         set_of_words.append(word)
 
       q_w_m[k]=frequency
@@ -216,7 +216,7 @@ def compute_complexity_compositionality(agent,
 
     for k in q_w_m:
         for word in q_w_m[k]:
-            complexity += 1/len(q_w_m) * q_w_m[k][word] * np.log(q_w_m[k][word]/q_w[word])
+            complexity += ((1/len(q_w_m)) * q_w_m[k][word] * np.log10(q_w_m[k][word]/q_w[word]))
 
     return complexity
 

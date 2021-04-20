@@ -123,8 +123,8 @@ def get_params(params):
     parser.add_argument('--split_proportion', type=float, default=0.8,help='Train/test split prop')
 
     # Test
-    parser.add_argument('--agent_weights', type=str,help='Path to agent weights')
-    parser.add_argument('--train_split', type=str,help='Path to agent weights')
+    parser.add_argument('--agent_1_weights', type=str,help='Path to agent weights')
+    parser.add_argument('--agent_2_weights', type=str,help='Path to agent weights')
     parser.add_argument('--compositionality', type=bool,default=False,help='Compositionality game ?')
     parser.add_argument('--n_sampling', type=int,default=1000,help='Number of message sampling for estimation')
     parser.add_argument('--train_split', type=str,help='Path to the train split')
@@ -179,9 +179,6 @@ def compute_complexity_compositionality(agent,
 
     dataset = [[torch.stack(dataset).to(device), None]]
 
-    q_w_m={}
-    set_of_words=[]
-
     # 1. Estimate q(w|m) via sampling
     sampling_inventory={j:[] for j in range(len(combination))}
     for _ in range(n_sampling):
@@ -221,12 +218,51 @@ def compute_complexity_compositionality(agent,
     return complexity
 
 
+def compute_average_symbol_entropy(agent,
+                                    compo_dataset,
+                                    split,
+                                    n_attributes,
+                                    n_values,
+                                    max_len,
+                                    vocab_size,
+                                    n_sampling,
+                                    device,
+                                    meanings_distribution="uniform",
+                                    ):
+
+    """
+    Return the complexity of the language according to :
+    https://www.pnas.org/content/pnas/115/31/7937.full.pdf
+
+    Iq(M,W) = \sum_{m,w} p(m)q(w|m)log(q(w|m)/q(w))
+    """
+
+    # 0. Build dataset
+    dataset=[]
+    combination=[]
+
+    for i in range(len(compo_dataset)):
+        if i in split:
+          dataset.append(torch.from_numpy(compo_dataset[i]).float())
+          combination.append(np.reshape(compo_dataset[i],(n_attributes,n_values)).argmax(1))
+
+    dataset = [[torch.stack(dataset).to(device), None]]
+
+    counts=np.zeros((len(split),max_len,vocab_size))
+
+    for _ in range(n_sampling):
+      messages = sample_messages(agent,dataset,device)
+      for i,message in enumerate(messages):
+        for j in range(len(message)):
+            counts[i,j,message[j]]+=1
+
+    counts/=n_sampling
+
+
 
 
 def main(params):
-    print(torch.cuda.is_available())
     opts = get_params(params)
-    print(opts, flush=True)
     device = opts.device
 
     force_eos = opts.force_eos == 1
@@ -268,11 +304,41 @@ def main(params):
                                                 receiver_num_layers=opts.receiver_num_layers,
                                                 force_eos=force_eos)
 
-        agent_1.load_state_dict(torch.load(opts.agent_weights,map_location=torch.device('cpu')))
+        agent_1.load_state_dict(torch.load(opts.agent_1_weights,map_location=torch.device('cpu')))
         agent_1.to(device)
 
-        complexity = compute_complexity_compositionality(agent_1,compo_dataset,test_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
+        agent_2=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
+                                                n_attributes=opts.n_attributes,
+                                                n_values=opts.n_values,
+                                                max_len=opts.max_len,
+                                                embed_dim=opts.sender_embedding,
+                                                sender_hidden_size=opts.sender_hidden,
+                                                receiver_hidden_size=opts.receiver_hidden,
+                                                sender_cell=opts.sender_cell,
+                                                receiver_cell=opts.receiver_cell,
+                                                sender_num_layers=opts.sender_num_layers,
+                                                receiver_num_layers=opts.receiver_num_layers,
+                                                force_eos=force_eos)
 
+        agent_2.load_state_dict(torch.load(opts.agent_2_weights,map_location=torch.device('cpu')))
+        agent_2.to(device)
+
+        #complexity_train_1 = compute_complexity_compositionality(agent_1,compo_dataset,train_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
+        #complexity_train_2 = compute_complexity_compositionality(agent_2,compo_dataset,train_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
+        #complexity_test_1 = compute_complexity_compositionality(agent_1,compo_dataset,test_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
+        #complexity_test_2 = compute_complexity_compositionality(agent_2,compo_dataset,test_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
+
+        #print("Complexity train 1={}".format(complexity_train_1),flush=True)
+        #print("Complexity train 2={}".format(complexity_train_2),flush=True)
+        #print("Complexity test 1={}".format(complexity_test_1),flush=True)
+        #print("Complexity test 2={}".format(complexity_test_2),flush=True)
+
+        #np.save(opts.dir_save+'/training_info/complexity_train_1.npy',complexity_train_1)
+        #np.save(opts.dir_save+'/training_info/complexity_train_2.npy',complexity_train_2)
+        #np.save(opts.dir_save+'/training_info/complexity_test_1.npy',complexity_test_1)
+        #np.save(opts.dir_save+'/training_info/complexity_test_2.npy',complexity_test_2)
+
+        average_entropy=compute_average_symbol_entropy(agent_1,compo_dataset,train_split,opts.n_attributes, opts.n_values,opts.max_len,opts.vocab_size,opts.n_sampling, device, meanings_distribution="uniform")
 
     core.close()
 

@@ -128,8 +128,7 @@ def get_params(params):
     parser.add_argument('--agent_2_weights', type=str,help='Path to agent weights')
     parser.add_argument('--compositionality', type=bool,default=False,help='Compositionality game ?')
     parser.add_argument('--n_sampling', type=int,default=1000,help='Number of message sampling for estimation')
-    parser.add_argument('--train_split', type=str,help='Path to the train split')
-    parser.add_argument('--test_split', type=str,help='Path to test split')
+    parser.add_argument('--noise_prob', type=float,default=0.1,help='Noise level')
 
 
     args = core.init(parser, params)
@@ -152,118 +151,52 @@ def build_compo_dataset(n_values,n_attributes):
 
     return dataset
 
-def compute_complexity_compositionality(agent,
-                                        compo_dataset,
-                                        split,
-                                        n_attributes,
-                                        n_values,
-                                        n_sampling,
-                                        device,
-                                        meanings_distribution="uniform",
-                                        ):
+def compute_noise_robustness(agent_1,
+                             agent_2,
+                             n_sampling,
+                             noise_prob,
+                             max_len,
+                            features,
+                            device,
+                            ):
 
     """
-    Return the complexity of the language according to :
-    https://www.pnas.org/content/pnas/115/31/7937.full.pdf
-
-    Iq(M,W) = \sum_{m,w} p(m)q(w|m)log(q(w|m)/q(w))
+    Return noise robustness :
     """
 
-    # 0. Build dataset
-    dataset=[]
-    combination=[]
+    dataset = [[torch.eye(n_features).to(device), None]]
+    score=0.
 
-    for i in range(len(compo_dataset)):
-        if i in split:
-          dataset.append(torch.from_numpy(compo_dataset[i]).float())
-          combination.append(np.reshape(compo_dataset[i],(n_attributes,n_values)).argmax(1))
+    for _ in n_sampling:
 
-    dataset = [[torch.stack(dataset).to(device), None]]
-
-    # 1. Estimate q(w|m) via sampling
-    sampling_inventory={j:[] for j in range(len(combination))}
-    for _ in range(n_sampling):
-      messages = sample_messages(agent,dataset,device)
-      for i in range(len(messages)):
-        m=[str(sym) for sym in messages[i].to("cpu").numpy()]
-        m="".join(m)
-        sampling_inventory[i].append(m)
-
-    for k in sampling_inventory:
-      frequency = dict(collections.Counter(sampling_inventory[k]))
-      for word in frequency:
-        frequency[word]/=n_sampling
-        set_of_words.append(word)
-
-      q_w_m[k]=frequency
-
-    set_of_words=list(set(set_of_words))
-
-    # 2. Estimate q(w)
-    q_w={}
-    for word in set_of_words:
-      q_word=0.
-      for k in q_w_m:
-        if word in q_w_m[k]:
-          q_word+=( 1/len(q_w_m) * q_w_m[k][word])
-      q_w[word]=q_word
-
-    # 3. Compute complexity \sum_{m,w} p(m)q(w|m)log(q(w|m)/q(w))
-
-    complexity = 0.
-
-    for k in q_w_m:
-        for word in q_w_m[k]:
-            complexity += ((1/len(q_w_m)) * q_w_m[k][word] * np.log10(q_w_m[k][word]/q_w[word]))
-
-    return complexity
+        sender_inputs, messages, receiver_inputs, receiver_outputs= \
+            dump_sender_receiver_with_noise(agent_1=agent_1,agent_2=agent_2, noise_prob=noise_prob,dataset=dataset, device=device, max_len=max_len, variable_length=True)
 
 
-def compute_average_symbol_entropy(agent,
-                                    compo_dataset,
-                                    split,
-                                    n_attributes,
-                                    n_values,
-                                    max_len,
-                                    vocab_size,
-                                    n_sampling,
-                                    device,
-                                    meanings_distribution="uniform",
-                                    ):
+        unif_acc = 0.
+        powerlaw_acc = 0.
+        powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
+        powerlaw_probs /= powerlaw_probs.sum()
 
-    """
-    Return the complexity of the language according to :
-    https://www.pnas.org/content/pnas/115/31/7937.full.pdf
+        acc_vec=np.zeros(n_features)
 
-    Iq(M,W) = \sum_{m,w} p(m)q(w|m)log(q(w|m)/q(w))
-    """
+        for sender_input, message, receiver_output in zip(sender_inputs, messages, receiver_outputs):
+            input_symbol = sender_input.argmax()
+            output_symbol = receiver_output.argmax()
+            acc = (input_symbol == output_symbol).float().item()
 
-    # 0. Build dataset
-    dataset=[]
-    combination=[]
+            acc_vec[int(input_symbol)]=acc
 
-    for i in range(len(compo_dataset)):
-        if i in split:
-          dataset.append(torch.from_numpy(compo_dataset[i]).float())
-          combination.append(np.reshape(compo_dataset[i],(n_attributes,n_values)).argmax(1))
+            unif_acc += acc
+            powerlaw_acc += powerlaw_probs[input_symbol] * acc
 
-    dataset = [[torch.stack(dataset).to(device), None]]
+        unif_acc /= n_features
 
-    counts=np.zeros((len(split),max_len,vocab_size))
+        score+=unif_acc
 
-    for _ in range(n_sampling):
-      messages = sample_messages(agent,dataset,device)
-      for i,message in enumerate(messages):
-        for j in range(len(message)):
-            counts[i,j,message[j]]+=1
+    score/=n_sampling
 
-    counts/=n_sampling
-
-    counts=entropy(counts,axis=2)
-    counts=np.mean(counts)
-
-    return counts
-
+    return score
 
 
 
@@ -281,73 +214,46 @@ def main(params):
             probs.append(probs_by_att)
         probs_attributes=[1]*opts.n_attributes
 
-    if opts.compositionality:
-
-        compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
-
-        train_split = np.load(opts.train_split)
-        test_split= np.load(opts.test_split)
 
 
-        train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
-                                                    batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
-
-        # single batches with 1s on the diag
-        #test_loader = TestLoaderCompositionality(dataset=compo_dataset,n_values=opts.n_values,n_attributes=opts.n_attributes)
-        test_loader = TestLoaderCompositionality(dataset=compo_dataset,split=test_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
+    train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
                                                 batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
 
-        agent_1=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
-                                                n_attributes=opts.n_attributes,
-                                                n_values=opts.n_values,
-                                                max_len=opts.max_len,
-                                                embed_dim=opts.sender_embedding,
-                                                sender_hidden_size=opts.sender_hidden,
-                                                receiver_hidden_size=opts.receiver_hidden,
-                                                sender_cell=opts.sender_cell,
-                                                receiver_cell=opts.receiver_cell,
-                                                sender_num_layers=opts.sender_num_layers,
-                                                receiver_num_layers=opts.receiver_num_layers,
-                                                force_eos=force_eos)
 
-        agent_1.load_state_dict(torch.load(opts.agent_1_weights,map_location=torch.device('cpu')))
-        agent_1.to(device)
+    agent_1=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
+                                            n_attributes=opts.n_attributes,
+                                            n_values=opts.n_values,
+                                            max_len=opts.max_len,
+                                            embed_dim=opts.sender_embedding,
+                                            sender_hidden_size=opts.sender_hidden,
+                                            receiver_hidden_size=opts.receiver_hidden,
+                                            sender_cell=opts.sender_cell,
+                                            receiver_cell=opts.receiver_cell,
+                                            sender_num_layers=opts.sender_num_layers,
+                                            receiver_num_layers=opts.receiver_num_layers,
+                                            force_eos=force_eos)
 
-        agent_2=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
-                                                n_attributes=opts.n_attributes,
-                                                n_values=opts.n_values,
-                                                max_len=opts.max_len,
-                                                embed_dim=opts.sender_embedding,
-                                                sender_hidden_size=opts.sender_hidden,
-                                                receiver_hidden_size=opts.receiver_hidden,
-                                                sender_cell=opts.sender_cell,
-                                                receiver_cell=opts.receiver_cell,
-                                                sender_num_layers=opts.sender_num_layers,
-                                                receiver_num_layers=opts.receiver_num_layers,
-                                                force_eos=force_eos)
+    agent_1.load_state_dict(torch.load(opts.agent_1_weights,map_location=torch.device('cpu')))
+    agent_1.to(device)
 
-        agent_2.load_state_dict(torch.load(opts.agent_2_weights,map_location=torch.device('cpu')))
-        agent_2.to(device)
+    agent_2=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
+                                            n_attributes=opts.n_attributes,
+                                            n_values=opts.n_values,
+                                            max_len=opts.max_len,
+                                            embed_dim=opts.sender_embedding,
+                                            sender_hidden_size=opts.sender_hidden,
+                                            receiver_hidden_size=opts.receiver_hidden,
+                                            sender_cell=opts.sender_cell,
+                                            receiver_cell=opts.receiver_cell,
+                                            sender_num_layers=opts.sender_num_layers,
+                                            receiver_num_layers=opts.receiver_num_layers,
+                                            force_eos=force_eos)
 
-        #complexity_train_1 = compute_complexity_compositionality(agent_1,compo_dataset,train_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
-        #complexity_train_2 = compute_complexity_compositionality(agent_2,compo_dataset,train_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
-        #complexity_test_1 = compute_complexity_compositionality(agent_1,compo_dataset,test_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
-        #complexity_test_2 = compute_complexity_compositionality(agent_2,compo_dataset,test_split,opts.n_attributes, opts.n_values,opts.n_sampling, device, meanings_distribution="uniform")
+    agent_2.load_state_dict(torch.load(opts.agent_2_weights,map_location=torch.device('cpu')))
+    agent_2.to(device)
 
-        #print("Complexity train 1={}".format(complexity_train_1),flush=True)
-        #print("Complexity train 2={}".format(complexity_train_2),flush=True)
-        #print("Complexity test 1={}".format(complexity_test_1),flush=True)
-        #print("Complexity test 2={}".format(complexity_test_2),flush=True)
-
-        #np.save(opts.dir_save+'/training_info/complexity_train_1.npy',complexity_train_1)
-        #np.save(opts.dir_save+'/training_info/complexity_train_2.npy',complexity_train_2)
-        #np.save(opts.dir_save+'/training_info/complexity_test_1.npy',complexity_test_1)
-        #np.save(opts.dir_save+'/training_info/complexity_test_2.npy',complexity_test_2)
-
-        average_entropy_1=compute_average_symbol_entropy(agent_1,compo_dataset,train_split,opts.n_attributes, opts.n_values,opts.max_len,opts.vocab_size,opts.n_sampling, device, meanings_distribution="uniform")
-        average_entropy_2=compute_average_symbol_entropy(agent_2,compo_dataset,train_split,opts.n_attributes, opts.n_values,opts.max_len,opts.vocab_size,opts.n_sampling, device, meanings_distribution="uniform")
-
-        #np.save(opts.dir_save+'/training_info/average_train_1.npy',complexity_train_1)
+    noise_robustness_score_1 = compute_noise_robustness(agent_1,agent_2,opts.n_sampling,opts.noise_prob,opts.max_len,opts.n_features,device)
+    #np.save(opts.dir_save+'/training_info/average_train_1.npy',complexity_train_1)
 
     core.close()
 

@@ -1961,7 +1961,7 @@ def dump_sender_receiver_with_noise(agent_1: torch.nn.Module,
                                      dataset: 'torch.utils.data.DataLoader',
                                      noise_prob: float,
                                      max_len:int,
-                                     variable_length: bool,
+                                     gs:bool,variable_length: bool,
                                      device: Optional[torch.device] = None):
     """
     A tool to dump the interaction between Sender and Receiver
@@ -1992,7 +1992,7 @@ def dump_sender_receiver_with_noise(agent_1: torch.nn.Module,
             for i in range(message.size(0)):
                 for j in range(message.size(1)):
                     if message[i,j]!=0:
-                        if np.random.rand()<opts.noise_prob:
+                        if np.random.rand()<noise_prob:
                             message[i,j]=np.random.randint(1,max_len)
 
 

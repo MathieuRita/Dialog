@@ -31,9 +31,11 @@ from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialo
 from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
 
 # Compo
+from src.core.reinforce_wrappers import AgentBaseline2,AgentSharedRNN,AgentSharedEmbedding,AgentBaselineKL,AgentPol
+from src.core.reinforce_wrappers import DialogReinforce,DialogReinforceBis,DialogReinforceKL,DialogReinforceMemory
 from src.core.reinforce_wrappers import DialogReinforceCompositionality, AgentBaselineCompositionality
 from src.core.trainers import CompoTrainer,TrainerDialogCompositionality
-from src.core.util import sample_messages
+from src.core.util import sample_messages,dump_sender_receiver_with_noise
 
 
 def get_params(params):
@@ -156,7 +158,7 @@ def compute_noise_robustness(agent_1,
                              n_sampling,
                              noise_prob,
                              max_len,
-                            features,
+                            n_features,
                             device,
                             ):
 
@@ -167,10 +169,10 @@ def compute_noise_robustness(agent_1,
     dataset = [[torch.eye(n_features).to(device), None]]
     score=0.
 
-    for _ in n_sampling:
+    for _ in range(n_sampling):
 
         sender_inputs, messages, receiver_inputs, receiver_outputs= \
-            dump_sender_receiver_with_noise(agent_1=agent_1,agent_2=agent_2, noise_prob=noise_prob,dataset=dataset, device=device, max_len=max_len, variable_length=True)
+            dump_sender_receiver_with_noise(agent_1=agent_1,agent_2=agent_2, noise_prob=noise_prob,dataset=dataset, device=device, max_len=max_len, gs=False,variable_length=True)
 
 
         unif_acc = 0.
@@ -214,40 +216,34 @@ def main(params):
             probs.append(probs_by_att)
         probs_attributes=[1]*opts.n_attributes
 
+    agent_1=AgentBaseline2(vocab_size=opts.vocab_size,
+                        n_features=opts.n_features,
+                        max_len=opts.max_len,
+                        embed_dim=opts.sender_embedding,
+                        sender_hidden_size=opts.sender_hidden,
+                        receiver_hidden_size=opts.receiver_hidden,
+                        sender_cell=opts.sender_cell,
+                        receiver_cell=opts.receiver_cell,
+                        sender_num_layers=opts.sender_num_layers,
+                        receiver_num_layers=opts.receiver_num_layers,
+                        force_eos=force_eos)
 
-
-    train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
-                                                batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
-
-
-    agent_1=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
-                                            n_attributes=opts.n_attributes,
-                                            n_values=opts.n_values,
-                                            max_len=opts.max_len,
-                                            embed_dim=opts.sender_embedding,
-                                            sender_hidden_size=opts.sender_hidden,
-                                            receiver_hidden_size=opts.receiver_hidden,
-                                            sender_cell=opts.sender_cell,
-                                            receiver_cell=opts.receiver_cell,
-                                            sender_num_layers=opts.sender_num_layers,
-                                            receiver_num_layers=opts.receiver_num_layers,
-                                            force_eos=force_eos)
 
     agent_1.load_state_dict(torch.load(opts.agent_1_weights,map_location=torch.device('cpu')))
     agent_1.to(device)
 
-    agent_2=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
-                                            n_attributes=opts.n_attributes,
-                                            n_values=opts.n_values,
-                                            max_len=opts.max_len,
-                                            embed_dim=opts.sender_embedding,
-                                            sender_hidden_size=opts.sender_hidden,
-                                            receiver_hidden_size=opts.receiver_hidden,
-                                            sender_cell=opts.sender_cell,
-                                            receiver_cell=opts.receiver_cell,
-                                            sender_num_layers=opts.sender_num_layers,
-                                            receiver_num_layers=opts.receiver_num_layers,
-                                            force_eos=force_eos)
+    agent_2=AgentBaseline2(vocab_size=opts.vocab_size,
+                        n_features=opts.n_features,
+                        max_len=opts.max_len,
+                        embed_dim=opts.sender_embedding,
+                        sender_hidden_size=opts.sender_hidden,
+                        receiver_hidden_size=opts.receiver_hidden,
+                        sender_cell=opts.sender_cell,
+                        receiver_cell=opts.receiver_cell,
+                        sender_num_layers=opts.sender_num_layers,
+                        receiver_num_layers=opts.receiver_num_layers,
+                        force_eos=force_eos)
+
 
     agent_2.load_state_dict(torch.load(opts.agent_2_weights,map_location=torch.device('cpu')))
     agent_2.to(device)

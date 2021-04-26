@@ -30,7 +30,7 @@ from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerD
 
 # Compo
 from src.core.reinforce_wrappers import DialogReinforceCompositionality, AgentBaselineCompositionality
-from src.core.trainers import CompoTrainer,TrainerDialogCompositionality
+from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,TrainerDialogAsymLR
 
 
 def get_params(params):
@@ -116,9 +116,14 @@ def get_params(params):
     # Baseline/reward mode
     parser.add_argument('--reward_mode', type=str, default="neg_loss",help='Choice for reward')
     parser.add_argument('--baseline_mode', type=str, default="new",help='Choice for baseline')
+    parser.add_argument('--model', type=str, default="expe_1",help='Choice of expe')
 
     # Split
     parser.add_argument('--split_proportion', type=float, default=0.8,help='Train/test split prop')
+
+    # Compo
+    parser.add_argument('--sender_lr', type=float, default=0.001,help='Lr for senders (for asymmetric expe)')
+    parser.add_argument('--receiver_lr', type=float, default=0.01,help='Lr for receivers (for asymmetric expe)')
 
     args = core.init(parser, params)
 
@@ -425,6 +430,27 @@ def main(params):
                                                 validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
     elif opts.model=="expe_lr":
+
+        speaker_parameters = list(game.agent_1.agent_sender.parameters()) + \
+                               list(game.agent_1.sender_norm_h.parameters()) + \
+                               list(game.agent_1.sender_norm_c.parameters()) + \
+                               list(game.agent_1.hidden_to_output.parameters()) + \
+                               list(game.agent_1.sender_embedding.parameters()) + \
+                               list(game.agent_1.sender_cells.parameters()) + \
+                               list(game.agent_2.agent_sender.parameters()) + \
+                               list(game.agent_2.sender_norm_h.parameters()) + \
+                               list(game.agent_2.sender_norm_c.parameters()) + \
+                               list(game.agent_2.hidden_to_output.parameters()) + \
+                               list(game.agent_2.sender_embedding.parameters()) + \
+                               list(game.agent_2.sender_cells.parameters())
+
+        listener_parameters = list(game.agent_1.agent_receiver.parameters()) + \
+                              list(game.agent_1.receiver_cell.parameters()) + \
+                              list(game.agent_1.receiver_embedding.parameters()) + \
+                              list(game.agent_2.agent_receiver.parameters()) + \
+                              list(game.agent_2.receiver_cell.parameters()) + \
+                              list(game.agent_2.receiver_embedding.parameters())
+
         # SGD
         optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=0.001, momentum=0.9,nesterov=False)
         optimizer_listener=torch.optim.SGD(listener_parameters, lr=0.01, momentum=0.9,nesterov=False)

@@ -2621,8 +2621,8 @@ def main(params):
         #optimizer_listener = core.build_optimizer(list(listener_parameters),lr=opts.receiver_lr)
 
         # SGD
-        optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=0.001, momentum=0.9,nesterov=False)
-        optimizer_listener=torch.optim.SGD(listener_parameters, lr=0.01, momentum=0.9,nesterov=False)
+        optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=opts.sender_lr, momentum=0.9,nesterov=False)
+        optimizer_listener=torch.optim.SGD(listener_parameters, lr=opts.receiver_lr, momentum=0.9,nesterov=False)
 
 
         "Create trainer"

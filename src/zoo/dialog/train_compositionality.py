@@ -418,11 +418,26 @@ def main(params):
                                             device=device)
 
     "Create optimizers"
-    optimizer = core.build_optimizer(list(game.parameters()))
+    if opts.model=="expe_1":
+        optimizer = core.build_optimizer(list(game.parameters()))
 
-    trainer = TrainerDialogCompositionality(n_attributes=opts.n_attributes,n_values=opts.n_values,game=game, optimizer=optimizer, train_data=train_loader,
-                                            validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+        trainer = TrainerDialogCompositionality(n_attributes=opts.n_attributes,n_values=opts.n_values,game=game, optimizer=optimizer, train_data=train_loader,
+                                                validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
+    elif opts.model=="expe_lr":
+        # SGD
+        optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=0.001, momentum=0.9,nesterov=False)
+        optimizer_listener=torch.optim.SGD(listener_parameters, lr=0.01, momentum=0.9,nesterov=False)
+
+
+        "Create trainer"
+        #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
+        #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+        trainer = TrainerDialogAsymLR(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener, train_data=train_loader, \
+                                      validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+    else:
+        raise("Model not indicated")
 
     # Create save dir
     if not path.exists(opts.dir_save):

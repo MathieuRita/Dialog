@@ -1064,8 +1064,8 @@ class TrainerDialog4Optim:
                 optimized_loss.backward()
                 self.optimizer_speaker_1.step()
                 self.optimizer_listener_1.step()
-                self.optimizer_speaker_2.zero_grad()
-                self.optimizer_listener_2.zero_grad()
+                self.optimizer_speaker_2.step()
+                self.optimizer_listener_2.step()
             else:
                 optimized_loss, rest = self.game(*batch,direction="2->1")
                 self.optimizer_speaker_1.zero_grad()
@@ -1075,8 +1075,8 @@ class TrainerDialog4Optim:
                 optimized_loss.backward()
                 self.optimizer_speaker_1.step()
                 self.optimizer_listener_1.step()
-                self.optimizer_speaker_2.zero_grad()
-                self.optimizer_listener_2.zero_grad()
+                self.optimizer_speaker_2.step()
+                self.optimizer_listener_2.step()
 
 
             mean_rest = _add_dicts_2(mean_rest, rest)

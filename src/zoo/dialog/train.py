@@ -2287,7 +2287,7 @@ def main(params):
         trainer = TrainerDialog4Optim(game=game,
                                       optimizer_speaker_1=optimizer_speaker_1,
                                       optimizer_listener_1=optimizer_listener_1,
-                                      optimizer_speaker_1=optimizer_speaker_1,
+                                      optimizer_speaker_2=optimizer_speaker_2,
                                       optimizer_listener_2=optimizer_listener_2,
                                       train_data=train_loader,
                                       validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
@@ -2429,7 +2429,7 @@ def main(params):
         trainer = TrainerDialog4Optim(game=game,
                                       optimizer_speaker_1=optimizer_speaker_1,
                                       optimizer_listener_1=optimizer_listener_1,
-                                      optimizer_speaker_1=optimizer_speaker_1,
+                                      optimizer_speaker_2=optimizer_speaker_2,
                                       optimizer_listener_2=optimizer_listener_2,
                                       train_data=train_loader,
                                       validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])

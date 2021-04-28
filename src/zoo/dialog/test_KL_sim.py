@@ -226,13 +226,14 @@ def main(params):
     policy_1 = estimate_policy(agent_1,opts.n_sampling,opts.n_features,opts.vocab_size,opts.max_len,device)
     policy_2 = estimate_policy(agent_2,opts.n_sampling,opts.n_features,opts.vocab_size,opts.max_len,device)
 
-    def L2_sim(p, q):
-        l2=(p-q)**2
-        l2=np.sum(l2,axis=2)
-        return np.mean(l2)
+    #def L2_sim(p, q):
+    #    l2=(p-q)**2
+    #    l2=np.sum(l2,axis=2)
+    #    return np.mean(l2)
 
-    l2=L2_sim(policy_1.cpu().numpy(),policy_2.cpu().numpy())
-    np.save(opts.dir_save+'/training_info/l2_similarity.npy',l2)
+    #l2=L2_sim(policy_1.cpu().numpy(),policy_2.cpu().numpy())
+    np.save(opts.dir_save+'/training_info/policy_1.npy',policy_1.cpu().numpy())
+    np.save(opts.dir_save+'/training_info/policy_2.npy',policy_2.cpu().numpy())
 
     core.close()
 

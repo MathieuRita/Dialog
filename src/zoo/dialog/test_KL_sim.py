@@ -153,7 +153,7 @@ def build_compo_dataset(n_values,n_attributes):
 
     return dataset
 
-def estimate_policy(agent_1,n_sampling,n_features,vocab_size,max_len):
+def estimate_policy(agent_1,n_sampling,n_features,vocab_size,max_len,device):
 
     """
     Estimate agent (speaker module) policies based on message samples
@@ -223,8 +223,8 @@ def main(params):
     agent_2.load_state_dict(torch.load(opts.agent_2_weights,map_location=torch.device('cpu')))
     agent_2.to(device)
 
-    policy_1 = estimate_policy(agent_1,agent_2,opts.n_sampling,opts.noise_prob,opts.max_len,opts.n_features,device)
-    policy_2 = estimate_policy(agent_1,agent_2,opts.n_sampling,opts.noise_prob,opts.max_len,opts.n_features,device)
+    policy_1 = estimate_policy(agent_1,agent_2,opts.n_sampling,opts.n_features,opts.vocab_size,opts.max_len,device)
+    policy_2 = estimate_policy(agent_1,agent_2,opts.n_sampling,opts.n_features,opts.vocab_size,opts.max_len,device)
 
     def kl_divergence(p, q):
         return np.sum(np.where(1*(p==0)+1*(q==0)!=1, p * np.log(p / q), 0))

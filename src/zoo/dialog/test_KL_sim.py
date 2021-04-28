@@ -153,7 +153,7 @@ def build_compo_dataset(n_values,n_attributes):
 
     return dataset
 
-def estimate_policy(agent_1,n_sampling,n_features,vocab_size,max_len,device):
+def estimate_policy(agent,n_sampling,n_features,vocab_size,max_len,device):
 
     """
     Estimate agent (speaker module) policies based on message samples
@@ -223,14 +223,16 @@ def main(params):
     agent_2.load_state_dict(torch.load(opts.agent_2_weights,map_location=torch.device('cpu')))
     agent_2.to(device)
 
-    policy_1 = estimate_policy(agent_1,agent_2,opts.n_sampling,opts.n_features,opts.vocab_size,opts.max_len,device)
-    policy_2 = estimate_policy(agent_1,agent_2,opts.n_sampling,opts.n_features,opts.vocab_size,opts.max_len,device)
+    policy_1 = estimate_policy(agent_1,opts.n_sampling,opts.n_features,opts.vocab_size,opts.max_len,device)
+    policy_2 = estimate_policy(agent_2,opts.n_sampling,opts.n_features,opts.vocab_size,opts.max_len,device)
 
-    def kl_divergence(p, q):
-        return np.sum(np.where(1*(p==0)+1*(q==0)!=1, p * np.log(p / q), 0))
+    def L2_sim(p, q):
+        l2=(p-q)**2
+        l2=np.sum(l2,axis=2)
+        return np.mean(l2)
 
-    kl=kl_divergence(policy_1,policy_2)
-    np.save(opts.dir_save+'/training_info/kl_divergence.npy',kl)
+    l2=L2_sim(policy_1.cpu().numpy(),policy_2.cpu().numpy())
+    np.save(opts.dir_save+'/training_info/l2_similarity.npy',l2)
 
     core.close()
 

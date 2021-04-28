@@ -153,53 +153,28 @@ def build_compo_dataset(n_values,n_attributes):
 
     return dataset
 
-def compute_noise_robustness(agent_1,
-                             agent_2,
-                             n_sampling,
-                             noise_prob,
-                             max_len,
-                            n_features,
-                            device,
-                            ):
+def estimate_policy(agent_1,n_sampling,n_features,vocab_size,max_len):
 
     """
-    Return noise robustness :
+    Estimate agent (speaker module) policies based on message samples
     """
 
     dataset = [[torch.eye(n_features).to(device), None]]
-    score=0.
+
+    onehots=torch.eye(vocab_size)
+
+    policy=torch.zeros(n_features,max_len,vocab_size)
 
     for _ in range(n_sampling):
+        messages = sample_messages(agent,dataset,device)
 
-        sender_inputs, messages, receiver_inputs, receiver_outputs= \
-            dump_sender_receiver_with_noise(agent_1=agent_1,agent_2=agent_2, noise_prob=noise_prob,dataset=dataset, device=device, max_len=max_len, gs=False,variable_length=True)
+        for i in range(messages.size(0)):
+            for j in range(messages.size(1)):
+                policy[i,j,:]+=onehots[messages[i,j]]
 
+    policy/=n_sampling
 
-        unif_acc = 0.
-        powerlaw_acc = 0.
-        powerlaw_probs = 1 / np.arange(1, n_features+1, dtype=np.float32)
-        powerlaw_probs /= powerlaw_probs.sum()
-
-        acc_vec=np.zeros(n_features)
-
-        for sender_input, message, receiver_output in zip(sender_inputs, messages, receiver_outputs):
-            input_symbol = sender_input.argmax()
-            output_symbol = receiver_output.argmax()
-            acc = (input_symbol == output_symbol).float().item()
-
-            acc_vec[int(input_symbol)]=acc
-
-            unif_acc += acc
-            powerlaw_acc += powerlaw_probs[input_symbol] * acc
-
-        unif_acc /= n_features
-
-        score+=unif_acc
-
-    score/=n_sampling
-
-    return score
-
+    return policy
 
 
 def main(params):
@@ -248,9 +223,14 @@ def main(params):
     agent_2.load_state_dict(torch.load(opts.agent_2_weights,map_location=torch.device('cpu')))
     agent_2.to(device)
 
-    noise_robustness_score_1 = compute_noise_robustness(agent_1,agent_2,opts.n_sampling,opts.noise_prob,opts.max_len,opts.n_features,device)
+    policy_1 = estimate_policy(agent_1,agent_2,opts.n_sampling,opts.noise_prob,opts.max_len,opts.n_features,device)
+    policy_2 = estimate_policy(agent_1,agent_2,opts.n_sampling,opts.noise_prob,opts.max_len,opts.n_features,device)
 
-    np.save(opts.dir_save+'/training_info/average_train_1.npy',complexity_train_1)
+    def kl_divergence(p, q):
+        return np.sum(np.where(1*(p==0)+1*(q==0)!=1, p * np.log(p / q), 0))
+
+    kl=kl_divergence(policy_1,policy_2)
+    np.save(opts.dir_save+'/training_info/kl_divergence.npy',kl)
 
     core.close()
 

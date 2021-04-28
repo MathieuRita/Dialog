@@ -452,8 +452,8 @@ def main(params):
                               list(game.agent_2.receiver_embedding.parameters())
 
         # SGD
-        optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=0.001, momentum=0.9,nesterov=False)
-        optimizer_listener=torch.optim.SGD(listener_parameters, lr=0.01, momentum=0.9,nesterov=False)
+        optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=opts.sender_lr, momentum=0.9,nesterov=False)
+        optimizer_listener=torch.optim.SGD(listener_parameters, lr=opts.receiver_lr, momentum=0.9,nesterov=False)
 
 
         "Create trainer"

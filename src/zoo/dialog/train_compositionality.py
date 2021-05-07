@@ -125,6 +125,10 @@ def get_params(params):
     parser.add_argument('--sender_lr', type=float, default=0.001,help='Lr for senders (for asymmetric expe)')
     parser.add_argument('--receiver_lr', type=float, default=0.01,help='Lr for receivers (for asymmetric expe)')
 
+    # Asym learning
+    parser.add_argument('--N_speaker', type=float, default=10,help='Number of speaker training step')
+    parser.add_argument('--N_listener', type=float, default=10,help='Number of listener training step')
+
     args = core.init(parser, params)
 
     return args
@@ -452,15 +456,18 @@ def main(params):
                               list(game.agent_2.receiver_embedding.parameters())
 
         # SGD
-        optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=opts.sender_lr, momentum=0.9,nesterov=False)
-        optimizer_listener=torch.optim.SGD(listener_parameters, lr=opts.receiver_lr, momentum=0.9,nesterov=False)
+        #optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=opts.sender_lr, momentum=0.9,nesterov=False)
+        #optimizer_listener=torch.optim.SGD(listener_parameters, lr=opts.receiver_lr, momentum=0.9,nesterov=False)
+        optimizer_speaker = core.build_optimizer(list(speaker_parameters),lr=opts.sender_lr)
+        optimizer_listener = core.build_optimizer(list(listener_parameters),lr=opts.receiver_lr)
 
 
         "Create trainer"
         #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
         #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
-        trainer = TrainerDialogAsymLR(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener, train_data=train_loader, \
-                                      validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+        trainer = TrainerDialogAsymStep(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
+                                        N_speaker=opts.N_speaker,N_listener=opts.N_listener,train_data=train_loader, \
+                                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
     else:
         raise("Model not indicated")

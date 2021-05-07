@@ -1053,7 +1053,7 @@ class TrainerDialogAsymStep:
 
             if iter%2==0:
                 optimized_loss, rest = self.game(*batch,direction="1->2")
-                if iter<=N_speaker:
+                if iter<=N_speaker-1:
                     self.optimizer_speaker.zero_grad()
                 else:
                     self.optimizer_listener.zero_grad()
@@ -1064,7 +1064,7 @@ class TrainerDialogAsymStep:
                     self.optimizer_listener.step()
             else:
                 optimized_loss, rest = self.game(*batch,direction="2->1")
-                if iter<=N_speaker:
+                if iter<=N_speaker-1:
                     self.optimizer_speaker.zero_grad()
                 else:
                     self.optimizer_listener.zero_grad()

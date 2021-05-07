@@ -30,7 +30,7 @@ from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerD
 
 # Compo
 from src.core.reinforce_wrappers import DialogReinforceCompositionality, AgentBaselineCompositionality
-from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,TrainerDialogAsymLR
+from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,TrainerDialogAsymLR,TrainerDialogAsymStep
 
 
 def get_params(params):

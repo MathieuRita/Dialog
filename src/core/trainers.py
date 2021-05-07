@@ -972,6 +972,8 @@ class TrainerDialogAsymStep:
         self.optimizer_listener = optimizer_listener
         self.train_data = train_data
         self.validation_data = validation_data
+        self.N_speaker=N_speaker
+        self.N_listener = N_listener
         common_opts = get_opts()
         self.validation_freq = common_opts.validation_freq
         self.device = common_opts.device if device is None else device
@@ -1053,23 +1055,23 @@ class TrainerDialogAsymStep:
 
             if iter%2==0:
                 optimized_loss, rest = self.game(*batch,direction="1->2")
-                if iter<=N_speaker-1:
+                if iter<=self.N_speaker-1:
                     self.optimizer_speaker.zero_grad()
                 else:
                     self.optimizer_listener.zero_grad()
                 optimized_loss.backward()
-                if iter<=N_speaker:
+                if iter<=self.N_speaker-1:
                     self.optimizer_speaker.step()
                 else:
                     self.optimizer_listener.step()
             else:
                 optimized_loss, rest = self.game(*batch,direction="2->1")
-                if iter<=N_speaker-1:
+                if iter<=self.N_speaker-1:
                     self.optimizer_speaker.zero_grad()
                 else:
                     self.optimizer_listener.zero_grad()
                 optimized_loss.backward()
-                if iter<=N_speaker:
+                if iter<=self.N_speaker-1:
                     self.optimizer_speaker.step()
                 else:
                     self.optimizer_listener.step()

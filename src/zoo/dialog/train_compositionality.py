@@ -463,6 +463,39 @@ def main(params):
 
 
         "Create trainer"
+        trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
+                                validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+    elif opts.model=="expe_step":
+
+        speaker_parameters = list(game.agent_1.agent_sender.parameters()) + \
+                               list(game.agent_1.sender_norm_h.parameters()) + \
+                               list(game.agent_1.sender_norm_c.parameters()) + \
+                               list(game.agent_1.hidden_to_output.parameters()) + \
+                               list(game.agent_1.sender_embedding.parameters()) + \
+                               list(game.agent_1.sender_cells.parameters()) + \
+                               list(game.agent_2.agent_sender.parameters()) + \
+                               list(game.agent_2.sender_norm_h.parameters()) + \
+                               list(game.agent_2.sender_norm_c.parameters()) + \
+                               list(game.agent_2.hidden_to_output.parameters()) + \
+                               list(game.agent_2.sender_embedding.parameters()) + \
+                               list(game.agent_2.sender_cells.parameters())
+
+        listener_parameters = list(game.agent_1.agent_receiver.parameters()) + \
+                              list(game.agent_1.receiver_cell.parameters()) + \
+                              list(game.agent_1.receiver_embedding.parameters()) + \
+                              list(game.agent_2.agent_receiver.parameters()) + \
+                              list(game.agent_2.receiver_cell.parameters()) + \
+                              list(game.agent_2.receiver_embedding.parameters())
+
+        # SGD
+        #optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=opts.sender_lr, momentum=0.9,nesterov=False)
+        #optimizer_listener=torch.optim.SGD(listener_parameters, lr=opts.receiver_lr, momentum=0.9,nesterov=False)
+        optimizer_speaker = core.build_optimizer(list(speaker_parameters),lr=opts.sender_lr)
+        optimizer_listener = core.build_optimizer(list(listener_parameters),lr=opts.receiver_lr)
+
+
+        "Create trainer"
         #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
         #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
         trainer = TrainerDialogAsymStep(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
@@ -608,7 +641,6 @@ def main(params):
         np.save(opts.dir_save+'/test/21_accuracy_test_{}.npy'.format(epoch), acc_vec_2_test)
         np.save(opts.dir_save+'/test/11_accuracy_test_{}.npy'.format(epoch), acc_vec_11_test)
         np.save(opts.dir_save+'/test/22_accuracy_test_{}.npy'.format(epoch), acc_vec_22_test)
-
 
     core.close()
 

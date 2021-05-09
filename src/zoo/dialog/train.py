@@ -1830,15 +1830,15 @@ def main(params):
             loss_weights={"self":1.,"cross":1.,"imitation":1.}
         #loss_weights={"self":opts.self_weight,"cross":opts.cross_weight,"imitation":opts.imitation_weight}
 
-        game = DialogReinforce(Agent_1=agent_1,
-                                Agent_2=agent_2,
-                                loss_understanding=loss_understanding,
-                                loss_imitation=loss_message_imitation,
-                                optim_params=optim_params,
-                                baseline_mode=opts.baseline_mode,
-                                reward_mode=opts.reward_mode,
-                                loss_weights=loss_weights,
-                                device=device)
+        game = DialogReinforceSingleListener(Agent_1=agent_1,
+                                            Agent_2=agent_2,
+                                            loss_understanding=loss_understanding,
+                                            loss_imitation=loss_message_imitation,
+                                            optim_params=optim_params,
+                                            baseline_mode=opts.baseline_mode,
+                                            reward_mode=opts.reward_mode,
+                                            loss_weights=loss_weights,
+                                            device=device)
 
         "Create optimizers"
         speaker_parameters = list(game.agent_1.agent_sender.parameters()) + \
@@ -1856,10 +1856,7 @@ def main(params):
 
         listener_parameters = list(game.agent_1.agent_receiver.parameters()) + \
                               list(game.agent_1.receiver_cell.parameters()) + \
-                              list(game.agent_1.receiver_embedding.parameters()) + \
-                              list(game.agent_2.agent_receiver.parameters()) + \
-                              list(game.agent_2.receiver_cell.parameters()) + \
-                              list(game.agent_2.receiver_embedding.parameters())
+                              list(game.agent_1.receiver_embedding.parameters())
 
         # ADAM
         optimizer_speaker = core.build_optimizer(list(speaker_parameters),lr=opts.sender_lr)

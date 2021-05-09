@@ -28,7 +28,7 @@ from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerD
 # Propre
 from src.core.reinforce_wrappers import AgentBaseline2,AgentSharedRNN,AgentSharedEmbedding,AgentBaselineKL,AgentPol
 from src.core.reinforce_wrappers import DialogReinforce,DialogReinforceBis,DialogReinforceKL,DialogReinforceMemory
-from src.core.trainers import TrainerDialog,TrainerDialogAsymLR,TrainerDialog4Optim
+from src.core.trainers import TrainerDialog,TrainerDialogAsymLR,TrainerDialog4Optim,TrainerDialogAsymStep
 
 def get_params(params):
     parser = argparse.ArgumentParser()
@@ -123,6 +123,10 @@ def get_params(params):
     # Asymmetric lr
     parser.add_argument('--sender_lr', type=float, default=0.0005,help='Lr for senders (for asymmetric expe)')
     parser.add_argument('--receiver_lr', type=float, default=0.0005,help='Lr for receivers (for asymmetric expe)')
+
+    # Asym learning
+    parser.add_argument('--N_speaker', type=float, default=10,help='Number of speaker training step')
+    parser.add_argument('--N_listener', type=float, default=10,help='Number of listener training step')
 
     args = core.init(parser, params)
 

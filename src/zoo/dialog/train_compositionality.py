@@ -29,7 +29,7 @@ from src.core.util import dump_sender_receiver_dialog,dump_sender_receiver_dialo
 from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerDialogModel3,TrainerDialogModel4,TrainerDialogModel5,TrainerPretraining,TrainerDialogModel6
 
 # Compo
-from src.core.reinforce_wrappers import DialogReinforceCompositionality, AgentBaselineCompositionality
+from src.core.reinforce_wrappers import DialogReinforceCompositionality, AgentBaselineCompositionality, DialogReinforceCompositionalitySingleListener
 from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,TrainerDialogAsymLR,TrainerDialogAsymStep
 
 
@@ -487,6 +487,50 @@ def main(params):
                               list(game.agent_2.agent_receiver.parameters()) + \
                               list(game.agent_2.receiver_cell.parameters()) + \
                               list(game.agent_2.receiver_embedding.parameters())
+
+        # SGD
+        #optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=opts.sender_lr, momentum=0.9,nesterov=False)
+        #optimizer_listener=torch.optim.SGD(listener_parameters, lr=opts.receiver_lr, momentum=0.9,nesterov=False)
+        optimizer_speaker = core.build_optimizer(list(speaker_parameters),lr=opts.sender_lr)
+        optimizer_listener = core.build_optimizer(list(listener_parameters),lr=opts.receiver_lr)
+
+
+        "Create trainer"
+        #trainer = TrainerDialog(game=game, optimizer=optimizer, train_data=train_loader, \
+        #                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+        trainer = TrainerDialogAsymStep(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
+                                        N_speaker=opts.N_speaker,N_listener=opts.N_listener,train_data=train_loader, \
+                                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+    elif opts.model=="expe_single_listener":
+
+        game = DialogReinforceCompositionalitySingleListener(Agent_1=agent_1,
+                                                            Agent_2=agent_2,
+                                                            n_attributes=opts.n_attributes,
+                                                            n_values=opts.n_values,
+                                                            loss_understanding=loss_understanding_compositionality,
+                                                            optim_params=optim_params,
+                                                            baseline_mode=opts.baseline_mode,
+                                                            reward_mode=opts.reward_mode,
+                                                            loss_weights=loss_weights,
+                                                            device=device)
+
+        speaker_parameters = list(game.agent_1.agent_sender.parameters()) + \
+                               list(game.agent_1.sender_norm_h.parameters()) + \
+                               list(game.agent_1.sender_norm_c.parameters()) + \
+                               list(game.agent_1.hidden_to_output.parameters()) + \
+                               list(game.agent_1.sender_embedding.parameters()) + \
+                               list(game.agent_1.sender_cells.parameters()) + \
+                               list(game.agent_2.agent_sender.parameters()) + \
+                               list(game.agent_2.sender_norm_h.parameters()) + \
+                               list(game.agent_2.sender_norm_c.parameters()) + \
+                               list(game.agent_2.hidden_to_output.parameters()) + \
+                               list(game.agent_2.sender_embedding.parameters()) + \
+                               list(game.agent_2.sender_cells.parameters())
+
+        listener_parameters = list(game.agent_1.agent_receiver.parameters()) + \
+                              list(game.agent_1.receiver_cell.parameters()) + \
+                              list(game.agent_1.receiver_embedding.parameters())
 
         # SGD
         #optimizer_speaker=torch.optim.SGD(speaker_parameters, lr=opts.sender_lr, momentum=0.9,nesterov=False)

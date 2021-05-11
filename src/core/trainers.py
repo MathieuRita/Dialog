@@ -1183,7 +1183,7 @@ class TrainerDialogMultiAgent:
         # since model is placed on GPU within Trainer, this leads to having optimizer's state and model parameters
         # on different devices. Here, we protect from that by moving optimizer's internal state to the proper device
         for agent in self.optimizer_speaker:
-            self.optimizer_speaker[k].state = move_to(self.optimizer_speaker[k].state, self.device)
+            self.optimizer_speaker[agent].state = move_to(self.optimizer_speaker[agent].state, self.device)
         for agent in self.optimizer_listener:
             self.optimizer_listener[agent].state = move_to(self.optimizer_listener[agent].state, self.device)
         self.should_stop = False
@@ -1230,17 +1230,12 @@ class TrainerDialogMultiAgent:
         self.game.eval()
         with torch.no_grad():
             for batch in self.validation_data:
-                batch = move_to(batch, self.device)
-                optimized_loss, rest = self.game(*batch,direction="1->2")
-                mean_loss += optimized_loss
-                mean_rest = _add_dicts_2(mean_rest, rest)
-                n_batches += 1
-            for batch in self.validation_data:
-                batch = move_to(batch, self.device)
-                optimized_loss, rest = self.game(*batch,direction="2->1")
-                mean_loss += optimized_loss
-                mean_rest = _add_dicts_2(mean_rest, rest)
-                n_batches += 1
+                for sender_id in range(self.N_agents):
+                  batch = move_to(batch, self.device)
+                  optimized_loss, rest = self.game(*batch,sender_id=sender_id)
+                  mean_loss += optimized_loss
+                  mean_rest = _add_dicts_2(mean_rest, rest)
+                  n_batches += 1
         mean_loss /= n_batches
         mean_rest = _div_dict(mean_rest, n_batches)
 
@@ -1256,18 +1251,18 @@ class TrainerDialogMultiAgent:
             batch = move_to(batch, self.device)
 
             # Choose the speaker that will play with listener
-            sender_id = randint(0,self.N_agents)
+            sender_id = randint(0,self.N_agents-1)
 
             optimized_loss, rest = self.game(*batch,sender_id=sender_id)
             #if iter<=self.N_speaker-1:
-            self.optimizer_speaker.zero_grad()
+            self.optimizer_speaker["agent_{}".format(sender_id)].zero_grad()
             #else:
-            self.optimizer_listener.zero_grad()
+            self.optimizer_listener["agent_{}".format(0)].zero_grad()
             optimized_loss.backward()
             #if iter<=self.N_speaker-1:
-            self.optimizer_speaker.step()
+            self.optimizer_speaker["agent_{}".format(sender_id)].step()
             #else:
-            self.optimizer_listener.step()
+            self.optimizer_listener["agent_{}".format(0)].step()
 
 
             mean_rest = _add_dicts_2(mean_rest, rest)

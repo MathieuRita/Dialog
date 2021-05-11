@@ -3114,6 +3114,8 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.device=device
+        for agent in self.agents:
+          self.agents[agent].to(self.device)
 
     def forward(self,
                 sender_input,
@@ -3137,7 +3139,7 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
 
         # Get receiver information (receiver_id always 0)
         receiver_id=0
-        agent_receiver=self.agents[0]
+        agent_receiver=self.agents["agent_{}".format(receiver_id)]
         loss_weights_receiver = self.loss_weights["agent_{}".format(receiver_id)]
         optim_params_receiver = self.optim_params["agent_{}".format(receiver_id)]
 

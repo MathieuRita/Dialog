@@ -134,8 +134,9 @@ def get_params(params):
     parser.add_argument('--N_step_speaker', type=float, default=10,help='Number of speaker training step')
     parser.add_argument('--N_step_listener', type=float, default=10,help='Number of listener training step')
 
-    #
-    parser.add_argument('--N_agents', type=float, default=3,help='Number of listener training step')
+    # MultiAgent
+    parser.add_argument('--N_agents', type=int, default=3,help='Number agents')
+    parser.add_argument('--compute_similarity', type=bool, default=False,help='Compute similarity')
 
     args = core.init(parser, params)
 
@@ -171,7 +172,7 @@ def build_compo_dataset(n_values,n_attributes):
 
     return dataset
 
-def dump_compositionality_multiagent(game,compo_dataset,split,n_attributes,n_values,device, epoch,past_messages=None):
+def dump_compositionality_multiagent(game,compo_dataset,split,n_attributes,n_values,device, epoch,past_messages=None,compute_similarity=False):
 
     dataset=[]
     combination=[]
@@ -219,14 +220,21 @@ def dump_compositionality_multiagent(game,compo_dataset,split,n_attributes,n_val
         print(agent)
         print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
 
-    "2. Similarity messages"
-    similarity_messages = np.zeros((len(n_agents),len(n_agents)))
-    for j,agent_1 in messages:
-        for k,agent_2 in messages:
-            similarity_val=np.mean([levenshtein(messages[agent_1][i],messages[agent_2][i])/np.max([len(messages[agent_1][i]),len(messages[agent_2][i])]) for i in range(len(messages[agent_1]))])
-            similarity_messages[j,k]=similarity_val
+    if compute_similarity:
+        "2. Similarity messages"
+        similarity_messages = np.zeros((n_agents,n_agents))
+        mean_similarity=[]
+        for j,agent_1 in enumerate(messages):
+            for k,agent_2 in enumerate(messages):
+                similarity_val=np.mean([levenshtein(messages[agent_1][i],messages[agent_2][i])/np.max([len(messages[agent_1][i]),len(messages[agent_2][i])]) for i in range(len(messages[agent_1]))])
+                similarity_messages[j,k]=similarity_val
+                if j!=k:
+                  mean_similarity.append(similarity_val)
 
-    print("Similarity between language = {}".format(np.mean(similarity_messages)),flush=True)
+
+        print("Similarity between language = {}".format(np.mean(mean_similarity)),flush=True)
+    else:
+        similarity_messages = []
 
     #if past_messages is not None:
     #    print("Similarity evo language 1 = {}".format(np.mean([levenshtein(messages_1[i],past_messages_1[i]) for i in range(len(messages_1))])),flush=True)
@@ -382,25 +390,21 @@ def main(params):
             optim_params["agent_{}".format(i)] = {"length_cost":0.,
                                                   "sender_entropy_coeff":opts.sender_entropy_coeff,
                                                   "receiver_entropy_coeff":opts.receiver_entropy_coeff}
+
+            speaker_parameters["agent_{}".format(i)]=list(agent.agent_sender.parameters()) + \
+                                                       list(agent.sender_norm_h.parameters()) + \
+                                                       list(agent.sender_norm_c.parameters()) + \
+                                                       list(agent.hidden_to_output.parameters()) + \
+                                                       list(agent.sender_embedding.parameters()) + \
+                                                       list(agent.sender_cells.parameters())
+
             if i==0:
                 loss_weights["agent_{}".format(i)]= {"self":1.,"cross":0.,"imitation":0.}
-                speaker_parameters["agent_{}".format(i)]=list(agent.agent_sender.parameters()) + \
-                                                           list(agent.sender_norm_h.parameters()) + \
-                                                           list(agent.sender_norm_c.parameters()) + \
-                                                           list(agent.hidden_to_output.parameters()) + \
-                                                           list(agent.sender_embedding.parameters()) + \
-                                                           list(agent.sender_cells.parameters())
+
 
                 listener_parameters["agent_{}".format(i)]=list(agent.agent_receiver.parameters()) + \
                                       list(agent.receiver_cell.parameters()) + \
                                       list(agent.receiver_embedding.parameters())
-
-                speaker_parameters["agent_{}".format(i)]=list(agent.agent_sender.parameters()) + \
-                                                           list(agent.sender_norm_h.parameters()) + \
-                                                           list(agent.sender_norm_c.parameters()) + \
-                                                           list(agent.hidden_to_output.parameters()) + \
-                                                           list(agent.sender_embedding.parameters()) + \
-                                                           list(agent.sender_cells.parameters())
 
             else:
                 loss_weights["agent_{}".format(i)]= {"self":0.,"cross":1.,"imitation":0.}
@@ -421,15 +425,15 @@ def main(params):
         optimizer_listener={}
 
         for i in range(opts.N_agents):
-            optimizer_speaker["agent_{}".format(i)].append(core.build_optimizer(list(speaker_parameters),lr=opts.sender_lr))
+            optimizer_speaker["agent_{}".format(i)] = core.build_optimizer(list(speaker_parameters["agent_{}".format(i)]),lr=opts.sender_lr)
             if i==0:
-                optimizer_listener["agent_{}".format(i)].append(core.build_optimizer(list(listener_parameters),lr=opts.receiver_lr))
+                optimizer_listener["agent_{}".format(i)] = core.build_optimizer(list(listener_parameters["agent_{}".format(i)]),lr=opts.receiver_lr)
 
 
         "Create trainer"
 
         trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
-                                        N_agents=opts.N_agents,N_speaker=opts.N_step_speaker,N_listener=opts.N_step_listener,train_data=train_loader, \
+                                        N_agents=opts.N_agents,N_step_speaker=opts.N_step_speaker,N_step_listener=opts.N_step_listener,train_data=train_loader, \
                                         validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
     else:
@@ -456,6 +460,10 @@ def main(params):
     for epoch in range(int(opts.n_epochs)):
 
         print("Epoch: "+str(epoch))
+        if epoch%10==0:
+            compute_similarity=True
+        else:
+            compute_similarity=opts.compute_similarity
 
         # Train
         list_train_loss,list_train_rest = trainer.train(n_epochs=1)
@@ -466,20 +474,20 @@ def main(params):
         # Store results
         training_losses.append(list_train_loss[-1])
         eval_losses.append(eval_loss)
-        training_entropy.append(list_train_rest[-1]["sender_entropy_N"])
-        training_loss_cross.append(list_train_rest[-1]["loss_1"])
-        eval_loss_cross.append(eval_rest["loss_1"])
+        training_entropy = [list_train_rest[-1]["sender_entropy_{}".format(i)] for i in range(opts.N_agents)]
+        training_loss_cross = [list_train_rest[-1]["loss_{}".format(i)] for i in range(opts.N_agents)]
+        eval_loss_cross = [eval_rest["loss_{}".format(i)] for i in range(opts.N_agents)]
 
         print("Train")
         if epoch==0:
             messages=[np.zeros((opts.n_values**opts.n_attributes,opts.max_len)) for _ in range(opts.N_agents)]
-        messages,accuracy_vectors, similarity_messages = dump_compositionality_multiagent(trainer.game,compo_dataset,train_split, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages)
+        messages,accuracy_vectors, similarity_messages = dump_compositionality_multiagent(trainer.game,compo_dataset,train_split, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages,compute_similarity=compute_similarity)
         np_messages = {agent:convert_messages_to_numpy(messages[agent]) for agent in messages}
 
         print("Test")
         if epoch==0:
             messages_test=[np.zeros((opts.n_values**opts.n_attributes,opts.max_len)) for _ in range(opts.N_agents)]
-        messages_test,accuracy_vectors_test, similarity_messages_test = dump_compositionality_multiagent(trainer.game,compo_dataset,test_split, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages_test)
+        messages_test,accuracy_vectors_test, similarity_messages_test = dump_compositionality_multiagent(trainer.game,compo_dataset,test_split, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages_test,compute_similarity=compute_similarity)
         np_messages_test = {agent:convert_messages_to_numpy(messages_test[agent]) for agent in messages_test}
 
         # Save models

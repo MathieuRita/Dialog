@@ -474,9 +474,18 @@ def main(params):
         # Store results
         training_losses.append(list_train_loss[-1])
         eval_losses.append(eval_loss)
-        training_entropy = [list_train_rest[-1]["sender_entropy_{}".format(i)] for i in range(opts.N_agents)]
-        training_loss_cross = [list_train_rest[-1]["loss_{}".format(i)] for i in range(opts.N_agents)]
-        eval_loss_cross = [eval_rest["loss_{}".format(i)] for i in range(opts.N_agents)]
+
+        training_entropy=[-1]*opts.N_agents
+        training_loss_cross=[-1]*opts.N_agents
+        eval_loss_cross=[-1]*opts.N_agents
+
+        for i in range(opts.N_agents):
+            if "sender_entropy_{}".format(i) in list_train_rest[-1]:
+                training_entropy[i]=list_train_rest[-1]["sender_entropy_{}".format(i)]
+            if "loss_{}".format(i) in list_train_rest[-1]:
+                training_loss_cross[i]=list_train_rest[-1]["loss_{}".format(i)
+            if "loss_{}".format(i) in eval_rest:
+                eval_loss_cross[i] = eval_rest["loss_{}".format(i)]
 
         print("Train")
         if epoch==0:

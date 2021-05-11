@@ -3072,6 +3072,176 @@ class DialogReinforceCompositionalitySingleListener(nn.Module):
         self.n_points[name] += 1
         self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
 
+
+class DialogReinforceCompositionalityMultiAgent(nn.Module):
+
+    """
+    DialogReinforce implements the Dialog game
+    """
+
+    def __init__(self,
+                 Agents,
+                 n_attributes,
+                 n_values,
+                 loss_understanding,
+                 optim_params,
+                 loss_weights,
+                 device,
+                 baseline_mode="new",
+                 reward_mode="neg_loss"):
+        """
+        optim_params={"length_cost":0.,
+                      "sender_entropy_coeff_1":0.,
+                      "receiver_entropy_coeff_1":0.,
+                      "sender_entropy_coeff_2":0.,
+                      "receiver_entropy_coeff_2":0.}
+
+        loss_weights={"self":1.,
+                      "cross":1.,
+                      "imitation":1.,
+                      "length_regularization":0.,
+                      "entropy_regularization":1.}
+        """
+        super(DialogReinforceCompositionalityMultiAgent, self).__init__()
+        self.agents = Agents
+        self.n_attributes=n_attributes
+        self.n_values=n_values
+        self.optim_params = optim_params
+        self.loss_understanding = loss_understanding
+        self.loss_weights = loss_weights
+        self.baseline_mode=baseline_mode
+        self.reward_mode=reward_mode
+        self.mean_baseline = defaultdict(float)
+        self.n_points = defaultdict(float)
+        self.device=device
+
+    def forward(self,
+                sender_input,
+                unused_labels,
+                sender_id,
+                receiver_input=None):
+
+        """
+        Inputs:
+        - direction : N means "N->0"
+        """
+
+        sender_input=sender_input.to(self.device)
+
+        "0. Get sender and receiver (id + optim info) for playing the game"
+        # Get sender_id and sender information
+        sender_id = sender_id
+        agent_sender = self.agents["agent_{}".format(sender_id)]
+        loss_weights_sender = self.loss_weights["agent_{}".format(sender_id)]
+        optim_params_sender = self.optim_params["agent_{}".format(sender_id)]
+
+        # Get receiver information (receiver_id always 0)
+        receiver_id=0
+        agent_receiver=self.agents[0]
+        loss_weights_receiver = self.loss_weights["agent_{}".format(receiver_id)]
+        optim_params_receiver = self.optim_params["agent_{}".format(receiver_id)]
+
+        " 1. Agent actions "
+        # Message sending
+        message, log_prob_s,whole_log_prob_s, entropy_s = agent_sender.send(sender_input,return_policies=True)
+        message_lengths = find_lengths(message)
+        # Cross listening
+        receiver_output_cross, log_prob_r_cross, entropy_r_cross = agent_receiver.receive(message, receiver_input, message_lengths)
+        # Self listening
+        receiver_output_self, log_prob_r_self, entropy_r_self = agent_sender.receive(message, receiver_input, message_lengths)
+        # Imitation
+        # NO IMITATION
+
+
+        "2. Losses computation"
+        loss_cross, rest_cross = self.loss_understanding(sender_input, receiver_output_cross,self.n_attributes,self.n_values)
+
+        loss_self, rest_self = self.loss_understanding(sender_input, receiver_output_self,self.n_attributes,self.n_values)
+
+        # Average loss. Rk. Sortir loss_imitation de cette somme
+        loss = loss_weights_sender["self"]*loss_self + loss_weights_sender["cross"]*loss_cross
+        loss /= (loss_weights_sender["self"]+loss_weights_sender["cross"])
+
+        # Reward
+        if self.reward_mode=="neg_loss":
+            reward_self = -loss_self.detach()
+            reward_cross = -loss_cross.detach()
+        elif self.reward_mode=="proba":
+            reward_self = torch.exp(-loss_self.detach())
+            reward_cross = torch.exp(-loss_cross.detach())
+        elif self.reward_mode=="dense":
+            reward_self = 1.*(rest_self["acc"].sum(1)==self.n_attributes).detach()
+            reward_cross = 1.*(rest_cross["acc"].sum(1)==self.n_attributes).detach()
+
+        "3. Entropy + length Regularization"
+
+        # the entropy of the outputs of S before and including the eos symbol - as we don't care about what's after
+        effective_entropy_s = torch.zeros_like(entropy_r_self.mean(1))
+
+        # the log prob of the choices made by S before and including the eos symbol - again, we don't
+        # care about the rest
+        effective_log_prob_s = torch.zeros_like(log_prob_r_self.mean(1))
+
+
+        for i in range(message.size(1)):
+            not_eosed = (i < message_lengths).float()
+            effective_entropy_s += entropy_s[:, i] * not_eosed
+            effective_log_prob_s += log_prob_s[:, i] * not_eosed
+        effective_entropy_s = effective_entropy_s / message_lengths.float()
+
+        weighted_entropy = effective_entropy_s.mean() * optim_params_sender["sender_entropy_coeff"] #+ entropy_r_12.mean() * self.receiver_entropy_coeff_1
+
+        log_prob = effective_log_prob_s #+ log_prob_r_12
+
+        length_loss = message_lengths.float() * optim_params_sender["length_cost"]
+
+        "4. Variance reduction"
+        if self.baseline_mode=="original":
+            policy_loss_self = -((loss_self.detach() - self.mean_baseline['loss_self_{}'.format(sender_id)]) * log_prob).mean()
+            policy_loss_cross = -((loss_cross.detach() - self.mean_baseline['loss_cross_{}'.format(sender_id)]) * log_prob).mean()
+            policy_length_loss = ((length_loss.float() - self.mean_baseline['length_{}'.format(sender_id)]) * effective_log_prob_s).mean()
+
+        elif self.baseline_mode=="new":
+
+            policy_loss_self = -((reward_self - reward_self.mean())/(reward_self.std()) * log_prob).mean()
+            policy_loss_cross = -((reward_cross - reward_cross.mean())/(reward_cross.std())  * log_prob).mean()
+            policy_length_loss = ((length_loss.float() - length_loss.float().mean())  * effective_log_prob_s).mean()
+
+        " 5. Final loss"
+        policy_loss = loss_weights_sender["self"]*policy_loss_self + loss_weights_sender["cross"]*policy_loss_cross
+        policy_loss /= (loss_weights_sender["self"]+loss_weights_sender["cross"])
+
+        optimized_loss = policy_length_loss + policy_loss - weighted_entropy
+
+        # if the receiver is deterministic/differentiable, we apply the actual loss
+        optimized_loss += loss.mean()
+
+        if self.training:
+            self.update_baseline('loss_self_{}'.format(sender_id), loss_self)
+            self.update_baseline('loss_cross_{}'.format(sender_id), loss_cross)
+            self.update_baseline('length_{}'.format(sender_id), length_loss)
+
+        "6. Store results"
+        rest={}
+        rest['loss'] = optimized_loss.detach().item()
+        rest['loss_{}'.format(sender_id)] = optimized_loss.detach().item()
+        rest['sender_entropy_{}'.format(sender_id)] = entropy_s.mean().item()
+        rest['mean_length_{}'.format(sender_id)] = message_lengths.float().mean().item()
+        rest['loss_self_{}{}'.format(sender_id,sender_id)] = loss_self.mean().item()
+        rest['loss_cross_{}{}'.format(sender_id,receiver_id)] = loss_cross.mean().item()
+        rest['acc_self_{}{}'.format(sender_id,sender_id)]=rest_self['acc'].mean().item()
+        rest['acc_cross_{}{}'.format(sender_id,receiver_id)]=rest_cross['acc'].mean().item()
+        rest['reinforce_term_{}'.format(sender_id)]=policy_loss.detach().item()
+        rest['baseline_term_{}'.format(sender_id)]=(policy_loss/log_prob.mean()).detach().item()
+        rest['policy_{}'.format(sender_id)]=whole_log_prob_s.detach()
+
+        return optimized_loss, rest
+
+    def update_baseline(self, name, value):
+        self.n_points[name] += 1
+        self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
+
+
 class DialogReinforceMemory(nn.Module):
 
     """

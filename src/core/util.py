@@ -1882,7 +1882,7 @@ def dump_dialog_compositionality(game: torch.nn.Module,
             if gs: message_2 = message_2.argmax(dim=-1)  # actual symbols instead of one-hot encoded
 
             if not variable_length:
-                messages_1.extend(message_2)
+                messages_1.extend(message_1)
                 #receiver_outputs_11.extend(output_11)
                 #receiver_outputs_12.extend(output_12)
                 messages_2.extend(message_2)
@@ -1955,6 +1955,95 @@ def sample_messages(agent: torch.nn.Module,
             message_1 = message_1[0]
 
     return message_1
+
+
+def dump_multiagent_compositionality(game: torch.nn.Module,
+                                 dataset: 'torch.utils.data.DataLoader',
+                                 variable_length: bool,
+                                 device: Optional[torch.device] = None,
+                                 impatient = False):
+    """
+    A tool to dump the interaction between Sender and Receiver
+    :param game: A Game instance
+    :param dataset: Dataset of inputs to be used when analyzing the communication
+    :param gs: whether Gumbel-Softmax relaxation was used during training
+    :param variable_length: whether variable-length communication is used
+    :param device: device (e.g. 'cuda') to be used
+    :return:
+    """
+    train_state = game.training  # persist so we restore it back
+    game.eval()
+
+    device = device if device is not None else common_opts.device
+
+    sender_inputs, receiver_inputs = [], []
+    messages_agents, receiver_outputs_agents = {}, {}
+    labels = []
+
+    with torch.no_grad():
+        for batch in dataset:
+            # by agreement, each batch is (sender_input, labels) plus optional (receiver_input)
+            sender_input = move_to(batch[0], device)
+            receiver_input = None if len(batch) == 2 else move_to(batch[2], device)
+            outputs={}
+
+            for i in range(len(game.agents)):
+                message = game.agents["agent_{}".format(i)].send(sender_input)
+                message = message[0]
+
+                output = game.agents["agent_{}".format(0)].receive(message, receiver_input, None)
+                output=output[0]
+
+                # Compositionality
+                preds_by_att=[]
+                for j in range(output.size(1)):
+                    preds_by_att.append(output[:,j,:].argmax(1))
+
+                # Receiver outputs
+                receiver_outputs = []
+
+                for k in range(preds_by_att[j].size(0)): # i ???? print here
+                  output_sing=[]
+                  for attribute in range(len(preds_by_att)):
+                    output_sing.append(int(preds_by_att[attribute][k]))
+                  receiver_outputs.append(output_sing)
+
+                receiver_outputs_agents["agent_{}".format(i)] = receiver_outputs
+
+                # Messages post processing
+
+                if not variable_length:
+                    messages.extend(message)
+                else:
+                    messages=[]
+                    for k in range(message.size(0)):
+                        eos_positions = (message[k, :] == 0).nonzero()
+                        message_end = eos_positions[0].item() if eos_positions.size(0) > 0 else -1
+                        assert message_end == -1 or message[k, message_end] == 0
+                        if message_end < 0:
+                            messages.append(message[k, :])
+                        else:
+                            messages.append(message[k, :message_end + 1])
+
+                messages_agents["agent_{}".format(i)]=messages
+
+            # Post process labels, sender_inputs and receiver_inputs
+            if batch[1] is not None:
+                labels.extend(batch[1])
+
+            if isinstance(sender_input, list) or isinstance(sender_input, tuple):
+                sender_inputs.extend(zip(*sender_input))
+            else:
+                sender_inputs.extend(sender_input)
+
+            if receiver_input is not None:
+                receiver_inputs.extend(receiver_input)
+
+    game.train(mode=train_state)
+
+    return sender_inputs, messages_agents, receiver_inputs, receiver_outputs_agents, labels
+
+
 
 def dump_sender_receiver_with_noise(agent_1: torch.nn.Module,
                                     agent_2: torch.nn.Module,

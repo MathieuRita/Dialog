@@ -131,8 +131,7 @@ def get_params(params):
     parser.add_argument('--receiver_lr', type=float, default=0.01,help='Lr for receivers (for asymmetric expe)')
 
     # Asym learning
-    parser.add_argument('--N_step_speaker', type=float, default=10,help='Number of speaker training step')
-    parser.add_argument('--N_step_listener', type=float, default=10,help='Number of listener training step')
+    parser.add_argument('--step_ratio', type=float, default=1,help='N_step_speaker/N_step_listener')
 
     # MultiAgent
     parser.add_argument('--N_agents', type=int, default=3,help='Number agents')
@@ -439,7 +438,7 @@ def main(params):
         "Create trainer"
 
         trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
-                                        N_agents=opts.N_agents,N_step_speaker=opts.N_step_speaker,N_step_listener=opts.N_step_listener,train_data=train_loader, \
+                                        N_agents=opts.N_agents,step_ratio=opts.step_ratio,train_data=train_loader, \
                                         validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
     else:

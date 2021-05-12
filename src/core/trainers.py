@@ -1150,8 +1150,7 @@ class TrainerDialogMultiAgent:
             optimizer_speaker: dict,
             optimizer_listener: dict,
             N_agents: int,
-            N_step_speaker : int,
-            N_step_listener : int,
+            step_ratio : float,
             train_data: DataLoader,
             validation_data: Optional[DataLoader] = None,
             device: torch.device = None,
@@ -1173,8 +1172,7 @@ class TrainerDialogMultiAgent:
         self.train_data = train_data
         self.validation_data = validation_data
         self.N_agents = N_agents
-        self.N_step_speaker=N_step_speaker
-        self.N_step_listener = N_step_listener
+        self.step_ratio=step_ratio
         common_opts = get_opts()
         self.validation_freq = common_opts.validation_freq
         self.device = common_opts.device if device is None else device
@@ -1252,17 +1250,19 @@ class TrainerDialogMultiAgent:
 
             # Choose the speaker that will play with listener
             sender_id = randint(0,self.N_agents-1)
+            prob_step = np.random.rand()
 
             optimized_loss, rest = self.game(*batch,sender_id=sender_id)
-            #if iter<=self.N_speaker-1:
-            self.optimizer_speaker["agent_{}".format(sender_id)].zero_grad()
-            #else:
-            self.optimizer_listener["agent_{}".format(0)].zero_grad()
+
+            if prob_step<=min(self.step_ratio,1):
+                self.optimizer_speaker["agent_{}".format(sender_id)].zero_grad()
+            if prob_step<=min(1/self.step_ratio,1):
+                self.optimizer_listener["agent_{}".format(0)].zero_grad()
             optimized_loss.backward()
-            #if iter<=self.N_speaker-1:
-            self.optimizer_speaker["agent_{}".format(sender_id)].step()
-            #else:
-            self.optimizer_listener["agent_{}".format(0)].step()
+            if prob_step<=min(self.step_ratio,1):
+                self.optimizer_speaker["agent_{}".format(sender_id)].step()
+            if prob_step<=min(1/self.step_ratio,1):
+                self.optimizer_listener["agent_{}".format(0)].step()
 
 
             mean_rest = _add_dicts_2(mean_rest, rest)

@@ -129,6 +129,9 @@ def get_params(params):
     parser.add_argument('--N_speaker', type=float, default=10,help='Number of speaker training step')
     parser.add_argument('--N_listener', type=float, default=10,help='Number of listener training step')
 
+    # Print metrics
+    parser.add_argument('--print_metrics', type=bool, default=False,help='Print metrics ?')
+
     args = core.init(parser, params)
 
     return args
@@ -163,7 +166,9 @@ def build_compo_dataset(n_values,n_attributes):
 
     return dataset
 
-def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device, gs_mode, epoch,past_messages_1=None,past_messages_2=None):
+def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device, gs_mode,
+                          epoch,past_messages_1=None,past_messages_2=None,
+                          compute_similarity=False,print_metrics=False):
 
     dataset=[]
     combination=[]
@@ -181,7 +186,8 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
 
     n_messages = len(dataset[0][0])
 
-    print("Language 1 (Agent 1 -> Agent 2)")
+    if print_metrics:
+        print("Language 1 (Agent 1 -> Agent 2)")
 
     "1->2"
     unif_acc = 0.
@@ -201,18 +207,21 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
           if correct:
             unif_acc_general+=1.
 
-      if epoch%100==99:
-          print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_12[i]])}', flush=True)
+      if print_metrics:
+          if epoch%100==99:
+              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_12[i]])}', flush=True)
 
     unif_acc /= (n_messages) * n_attributes
     unif_acc_general/=n_messages
 
-    print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
+    if print_metrics:
+        print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
 
-    print(np.mean(acc_vec_1,axis=0))
+        print(np.mean(acc_vec_1,axis=0))
 
     "1->1"
-    print("internal listener")
+    if print_metrics:
+        print("internal listener")
     unif_acc = 0.
     unif_acc_general=0.
     acc_vec_11=np.zeros(((n_messages), n_attributes))
@@ -230,18 +239,19 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
 
           if correct:
             unif_acc_general+=1.
-
-      if epoch%100==99:
-          print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_11[i]])}', flush=True)
+      if print_metrics:
+          if epoch%100==99:
+              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_11[i]])}', flush=True)
 
     unif_acc /= (n_messages) * n_attributes
     unif_acc_general/=n_messages
 
-    print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
+    if print_metrics:
+        print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
 
-    print(np.mean(acc_vec_11,axis=0))
+        print(np.mean(acc_vec_11,axis=0))
 
-    print("Language 2 (Agent 2 -> Agent 1)")
+        print("Language 2 (Agent 2 -> Agent 1)")
 
     "2->1"
 
@@ -263,16 +273,18 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
           if correct:
             unif_acc_general+=1.
 
-      if epoch%100==99:
-          print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_21[i]])}', flush=True)
+      if print_metrics:
+          if epoch%100==99:
+              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_21[i]])}', flush=True)
 
     unif_acc /= (n_messages) * n_attributes
     unif_acc_general/=n_messages
 
-    print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
-    print(np.mean(acc_vec_2,axis=0))
+    if print_metrics:
+        print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
+        print(np.mean(acc_vec_2,axis=0))
 
-    print("internal listener")
+        print("internal listener")
 
     unif_acc = 0.
     unif_acc_general=0.
@@ -292,23 +304,28 @@ def dump_compositionality(game,compo_dataset,split,n_attributes,n_values,device,
           if correct:
             unif_acc_general+=1.
 
-      if epoch%100==99:
-          print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_22[i]])}', flush=True)
+      if print_metrics:
+          if epoch%100==99:
+              print(f'input: {",".join([str(x) for x in combination[i]])} -> message: {",".join([str(x.item()) for x in message])} -> output: {",".join([str(x) for x in receiver_outputs_22[i]])}', flush=True)
 
     unif_acc /= (n_messages) * n_attributes
     unif_acc_general/=n_messages
 
-    print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
-    print(np.mean(acc_vec_22,axis=0))
+    if print_metrics:
+        print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
+        print(np.mean(acc_vec_22,axis=0))
 
-    similarity_messages=np.mean([levenshtein(messages_1[i],messages_2[i])/np.max([len(messages_1[i]),len(messages_2[i])]) for i in range(len(messages_1))])
+    if compute_similarity:
+        similarity_messages=np.mean([levenshtein(messages_1[i],messages_2[i])/np.max([len(messages_1[i]),len(messages_2[i])]) for i in range(len(messages_1))])
 
-    print("Similarity between language = {}".format(similarity_messages),flush=True)
+        if print_metrics:
+            print("Similarity between language = {}".format(similarity_messages),flush=True)
 
-    if past_messages_1 is not None:
-        print("Similarity evo language 1 = {}".format(np.mean([levenshtein(messages_1[i],past_messages_1[i]) for i in range(len(messages_1))])),flush=True)
-    if past_messages_2 is not None:
-        print("Similarity evo language 2 = {}".format(np.mean([levenshtein(messages_2[i],past_messages_2[i]) for i in range(len(messages_2))])),flush=True)
+    if print_metrics:
+        if past_messages_1 is not None:
+            print("Similarity evo language 1 = {}".format(np.mean([levenshtein(messages_1[i],past_messages_1[i]) for i in range(len(messages_1))])),flush=True)
+        if past_messages_2 is not None:
+            print("Similarity evo language 2 = {}".format(np.mean([levenshtein(messages_2[i],past_messages_2[i]) for i in range(len(messages_2))])),flush=True)
 
 
     return messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages
@@ -591,6 +608,10 @@ def main(params):
     for epoch in range(int(opts.n_epochs)):
 
         print("Epoch: "+str(epoch))
+        if epoch%10==0:
+            compute_similarity=True
+        else:
+            compute_similarity=opts.print_metrics
 
         # Train
         list_train_loss,list_train_rest = trainer.train(n_epochs=1)
@@ -609,29 +630,27 @@ def main(params):
         eval_loss_21.append(eval_rest["loss_2"])
         training_loss_self_11.append(list_train_rest[-1]["loss_self_11"])
         training_loss_cross_12.append(list_train_rest[-1]["loss_cross_12"])
-        #training_loss_imitation_12.append(list_train_rest[-1]["loss_imitation_12"])
         training_loss_self_22.append(list_train_rest[-1]["loss_self_22"])
         training_loss_cross_21.append(list_train_rest[-1]["loss_cross_21"])
-        #training_loss_imitation_21.append(list_train_rest[-1]["loss_imitation_21"])
         eval_loss_self_11.append(eval_rest["loss_self_11"])
         eval_loss_cross_12.append(eval_rest["loss_cross_12"])
-        #eval_loss_imitation_12.append(eval_rest["loss_imitation_12"])
         eval_loss_self_22.append(eval_rest["loss_self_22"])
         eval_loss_cross_21.append(eval_rest["loss_cross_21"])
-        #eval_loss_imitation_21.append(eval_rest["loss_imitation_21"])
 
-        print("Train")
+        if opts.print_metrics:
+            print("Train")
         if epoch==0:
             messages_1=messages_2=np.zeros((opts.n_values**opts.n_attributes,opts.max_len))
-        messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_compositionality(trainer.game,compo_dataset,train_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2)
+        messages_1, messages_2,acc_vec_1, acc_vec_2, acc_vec_11, acc_vec_22, similarity_messages = dump_compositionality(trainer.game,compo_dataset,train_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1,past_messages_2=messages_2,compute_similarity=compute_similarity,print_metrics=opts.print_metrics)
         np_messages_1 = convert_messages_to_numpy(messages_1)
         np_messages_2 = convert_messages_to_numpy(messages_2)
         similarity_languages.append(similarity_messages)
 
-        print("Test")
+        if opts.print_metrics:
+            print("Test")
         if epoch==0:
             messages_1_test=messages_2_test=np.zeros((opts.n_values**opts.n_attributes,opts.max_len))
-        messages_1_test, messages_2_test,acc_vec_1_test, acc_vec_2_test, acc_vec_11_test, acc_vec_22_test, similarity_messages_test = dump_compositionality(trainer.game,compo_dataset,test_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1_test,past_messages_2=messages_2_test)
+        messages_1_test, messages_2_test,acc_vec_1_test, acc_vec_2_test, acc_vec_11_test, acc_vec_22_test, similarity_messages_test = dump_compositionality(trainer.game,compo_dataset,test_split, opts.n_attributes, opts.n_values, device, False,epoch,past_messages_1=messages_1_test,past_messages_2=messages_2_test,compute_similarity=compute_similarity,,print_metrics=opts.print_metrics)
         np_messages_1_test = convert_messages_to_numpy(messages_1_test)
         np_messages_2_test = convert_messages_to_numpy(messages_2_test)
         similarity_languages_test.append(similarity_messages_test)

@@ -2420,6 +2420,8 @@ class DialogReinforce(nn.Module):
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.device=device
+        self.agent_1.to(self.device)
+        self.agent_2.to(self.device)
 
     def forward(self,
                 sender_input,
@@ -2596,6 +2598,8 @@ class DialogReinforceSingleListener(nn.Module):
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.device=device
+        self.agent_1.to(self.device)
+        self.agent_2.to(self.device)
 
     def forward(self,
                 sender_input,
@@ -2776,6 +2780,8 @@ class DialogReinforceCompositionality(nn.Module):
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.device=device
+        self.agent_1.to(self.device)
+        self.agent_2.to(self.device)
 
     def forward(self,
                 sender_input,
@@ -2945,6 +2951,8 @@ class DialogReinforceCompositionalitySingleListener(nn.Module):
         self.mean_baseline = defaultdict(float)
         self.n_points = defaultdict(float)
         self.device=device
+        self.agent_1.to(self.device)
+        self.agent_2.to(self.device)
 
     def forward(self,
                 sender_input,

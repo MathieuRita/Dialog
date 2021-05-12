@@ -284,13 +284,17 @@ def main(params):
 
     compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
 
-    train_split = np.random.RandomState(opts.random_seed).choice(opts.n_values**opts.n_attributes,size=(int(opts.split_proportion*(opts.n_values**opts.n_attributes))),replace=False)
-    test_split=[]
+    if opts.split_proportion<1.:
+        train_split = np.random.RandomState(opts.random_seed).choice(opts.n_values**opts.n_attributes,size=(int(opts.split_proportion*(opts.n_values**opts.n_attributes))),replace=False)
+        test_split=[]
 
-    for j in range(opts.n_values**opts.n_attributes):
-      if j not in train_split:
-        test_split.append(j)
-    test_split = np.array(test_split)
+        for j in range(opts.n_values**opts.n_attributes):
+          if j not in train_split:
+            test_split.append(j)
+        test_split = np.array(test_split)
+
+    else:
+        train_split=test_split=np.arange(opts.n_values**opts.n_attributes)
 
     train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
                                                 batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
@@ -299,6 +303,8 @@ def main(params):
     #test_loader = TestLoaderCompositionality(dataset=compo_dataset,n_values=opts.n_values,n_attributes=opts.n_attributes)
     test_loader = TestLoaderCompositionality(dataset=compo_dataset,split=test_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
                                             batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
+
+
 
     "Create optimizers"
     if opts.model=="2_speakers_1_listener":

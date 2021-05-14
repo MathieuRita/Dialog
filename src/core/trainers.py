@@ -1255,7 +1255,7 @@ class TrainerDialogMultiAgent:
 
             # Choose the speaker that will play with listener
             sender_id = self.list_speakers[randint(0,len(self.list_speakers)-1)]
-            receiver_id = self.list_listeners[randint(0,len(self.list_speakers)-1)]
+            receiver_id = self.list_listeners[randint(0,len(self.list_listeners)-1)]
             prob_step = np.random.rand()
 
             optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_id=receiver_id)
@@ -1263,12 +1263,12 @@ class TrainerDialogMultiAgent:
             if prob_step<=min(self.step_ratio,1):
                 self.optimizer_speaker["agent_{}".format(sender_id)].zero_grad()
             if prob_step<=min(1/self.step_ratio,1):
-                self.optimizer_listener["agent_{}".format(0)].zero_grad()
+                self.optimizer_listener["agent_{}".format(receiver_id)].zero_grad()
             optimized_loss.backward()
             if prob_step<=min(self.step_ratio,1):
                 self.optimizer_speaker["agent_{}".format(sender_id)].step()
             if prob_step<=min(1/self.step_ratio,1):
-                self.optimizer_listener["agent_{}".format(0)].step()
+                self.optimizer_listener["agent_{}".format(receiver_id)].step()
 
 
             mean_rest = _add_dicts_2(mean_rest, rest)

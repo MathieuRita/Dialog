@@ -228,7 +228,7 @@ def dump_compositionality_multiagent(game,compo_dataset,split,list_speakers,list
             accs_tot.append(unif_acc)
 
         #print(agent)
-        print(json.dumps({'unif accuracy': np.mean(accs_tot)}))
+    print(json.dumps({'unif accuracy': np.mean(accs_tot)}))
 
     if compute_similarity:
         "2. Similarity messages"

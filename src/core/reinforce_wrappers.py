@@ -3129,6 +3129,7 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
                 sender_input,
                 unused_labels,
                 sender_id,
+                receiver_id,
                 receiver_input=None):
 
         """
@@ -3146,7 +3147,6 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         optim_params_sender = self.optim_params["agent_{}".format(sender_id)]
 
         # Get receiver information (receiver_id always 0)
-        receiver_id=0
         agent_receiver=self.agents["agent_{}".format(receiver_id)]
         loss_weights_receiver = self.loss_weights["agent_{}".format(receiver_id)]
         optim_params_receiver = self.optim_params["agent_{}".format(receiver_id)]

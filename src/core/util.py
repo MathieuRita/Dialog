@@ -1959,6 +1959,8 @@ def sample_messages(agent: torch.nn.Module,
 
 def dump_multiagent_compositionality(game: torch.nn.Module,
                                  dataset: 'torch.utils.data.DataLoader',
+                                 list_speakers : list,
+                                 list_listeners : list,
                                  variable_length: bool,
                                  device: Optional[torch.device] = None,
                                  impatient = False):
@@ -1987,28 +1989,32 @@ def dump_multiagent_compositionality(game: torch.nn.Module,
             receiver_input = None if len(batch) == 2 else move_to(batch[2], device)
             outputs={}
 
-            for i in range(len(game.agents)):
+            receiver_outputs_agents["agent_{}".format(i)]={}
+
+            for i in list_speakers:
                 message = game.agents["agent_{}".format(i)].send(sender_input)
                 message = message[0]
 
-                output = game.agents["agent_{}".format(0)].receive(message, receiver_input, None)
-                output=output[0]
+                for list in list_listeners:
 
-                # Compositionality
-                preds_by_att=[]
-                for j in range(output.size(1)):
-                    preds_by_att.append(output[:,j,:].argmax(1))
+                    output = game.agents["agent_{}".format(list)].receive(message, receiver_input, None)
+                    output=output[0]
 
-                # Receiver outputs
-                receiver_outputs = []
+                    # Compositionality
+                    preds_by_att=[]
+                    for j in range(output.size(1)):
+                        preds_by_att.append(output[:,j,:].argmax(1))
 
-                for k in range(preds_by_att[j].size(0)): # i ???? print here
-                  output_sing=[]
-                  for attribute in range(len(preds_by_att)):
-                    output_sing.append(int(preds_by_att[attribute][k]))
-                  receiver_outputs.append(output_sing)
+                    # Receiver outputs
+                    receiver_outputs = []
 
-                receiver_outputs_agents["agent_{}".format(i)] = receiver_outputs
+                    for k in range(preds_by_att[j].size(0)): # i ???? print here
+                      output_sing=[]
+                      for attribute in range(len(preds_by_att)):
+                        output_sing.append(int(preds_by_att[attribute][k]))
+                      receiver_outputs.append(output_sing)
+
+                    receiver_outputs_agents["agent_{}".format(i)]["agent_{}".format(list)] = receiver_outputs
 
                 # Messages post processing
 

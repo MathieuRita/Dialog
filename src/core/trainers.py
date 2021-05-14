@@ -1151,6 +1151,8 @@ class TrainerDialogMultiAgent:
             optimizer_listener: dict,
             N_agents: int,
             step_ratio : float,
+            list_speakers : list,
+            list_listeners : list,
             train_data: DataLoader,
             validation_data: Optional[DataLoader] = None,
             device: torch.device = None,
@@ -1173,6 +1175,8 @@ class TrainerDialogMultiAgent:
         self.validation_data = validation_data
         self.N_agents = N_agents
         self.step_ratio=step_ratio
+        self.list_speakers = list_speakers
+        self.list_listeners = list_listeners
         common_opts = get_opts()
         self.validation_freq = common_opts.validation_freq
         self.device = common_opts.device if device is None else device
@@ -1228,12 +1232,13 @@ class TrainerDialogMultiAgent:
         self.game.eval()
         with torch.no_grad():
             for batch in self.validation_data:
-                for sender_id in range(self.N_agents):
-                  batch = move_to(batch, self.device)
-                  optimized_loss, rest = self.game(*batch,sender_id=sender_id)
-                  mean_loss += optimized_loss
-                  mean_rest = _add_dicts_2(mean_rest, rest)
-                  n_batches += 1
+                for sender_id in self.list_speakers:
+                  for receiver_id in self.list_listeners:
+                      batch = move_to(batch, self.device)
+                      optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_id=receiver_id)
+                      mean_loss += optimized_loss
+                      mean_rest = _add_dicts_2(mean_rest, rest)
+                      n_batches += 1
         mean_loss /= n_batches
         mean_rest = _div_dict(mean_rest, n_batches)
 
@@ -1249,10 +1254,11 @@ class TrainerDialogMultiAgent:
             batch = move_to(batch, self.device)
 
             # Choose the speaker that will play with listener
-            sender_id = randint(0,self.N_agents-1)
+            sender_id = self.list_speakers[randint(0,len(self.list_speakers)-1)]
+            receiver_id = self.list_listeners[randint(0,len(self.list_speakers)-1)]
             prob_step = np.random.rand()
 
-            optimized_loss, rest = self.game(*batch,sender_id=sender_id)
+            optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_id=receiver_id)
 
             if prob_step<=min(self.step_ratio,1):
                 self.optimizer_speaker["agent_{}".format(sender_id)].zero_grad()

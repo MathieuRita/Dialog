@@ -141,6 +141,10 @@ def get_params(params):
 
     return args
 
+def fill_to_max_len(messages,max_len):
+    lengths=[len(m) for m in messages]
+    new_messages=[np.concatenate((m,[-1]*(max_len-lengths[i]))) for i,m in enumerate(messages)]
+    return new_messages
 
 def loss_understanding_compositionality(sender_input, receiver_output,n_attributes,n_values):
 
@@ -171,7 +175,7 @@ def build_compo_dataset(n_values,n_attributes):
 
     return dataset
 
-def dump_compositionality_multiagent(game,compo_dataset,split,n_attributes,n_values,device, epoch,past_messages=None,compute_similarity=False):
+def dump_compositionality_multiagent(game,compo_dataset,split,list_speakers,list_listeners,n_attributes,n_values,device, epoch,past_messages=None,compute_similarity=False):
 
     dataset=[]
     combination=[]
@@ -184,7 +188,7 @@ def dump_compositionality_multiagent(game,compo_dataset,split,n_attributes,n_val
     dataset = [[torch.stack(dataset).to(device), None]]
 
     sender_inputs, messages, _ , receiver_outputs,labels = \
-        dump_multiagent_compositionality(game, dataset, device=device, variable_length=True)
+        dump_multiagent_compositionality(game, dataset,list_speakers=list_speakers,list_listeners=list_listeners, device=device, variable_length=True)
     # Rq. sender_inputs = list, messages = dict , receiver_outputs = dict
 
     n_messages = len(dataset[0][0])
@@ -194,30 +198,35 @@ def dump_compositionality_multiagent(game,compo_dataset,split,n_attributes,n_val
 
     accuracy_vectors={}
 
-    for agent in messages:
-        unif_acc = 0.
-        unif_acc_general=0.
-        acc_vec=np.zeros(((n_messages), n_attributes))
+    for agent_speaker in messages:
 
-        for i in range(len(receiver_outputs[agent])):
-          message=messages[agent][i]
-          correct=True
-          if i<n_messages:
-              for j in range(len(list(combination[i]))):
-                if receiver_outputs[agent][i][j]==list(combination[i])[j]:
-                  unif_acc+=1
-                  acc_vec[i,j]=1
-                else:
-                  correct=False
-              if correct:
-                unif_acc_general+=1.
+        accuracy_vectors[agent_speaker]={}
 
-        accuracy_vectors[agent] = acc_vec
-        unif_acc /= (n_messages) * n_attributes
-        unif_acc_general/=n_messages
+        for agent_listener in receiver_outputs[agent_speaker]:
 
-        print(agent)
-        print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
+            unif_acc = 0.
+            unif_acc_general=0.
+            acc_vec=np.zeros(((n_messages), n_attributes))
+
+            for i in range(len(receiver_outputs[agent_speaker][agent_listener])):
+              message=messages[agent_speaker][i]
+              correct=True
+              if i<n_messages:
+                  for j in range(len(list(combination[i]))):
+                    if receiver_outputs[agent_speaker][i][j]==list(combination[i])[j]:
+                      unif_acc+=1
+                      acc_vec[i,j]=1
+                    else:
+                      correct=False
+                  if correct:
+                    unif_acc_general+=1.
+
+            accuracy_vectors[agent_speaker][agent_listener] = acc_vec
+            unif_acc /= (n_messages) * n_attributes
+            unif_acc_general/=n_messages
+
+        #print(agent)
+        #print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
 
     if compute_similarity:
         "2. Similarity messages"
@@ -403,16 +412,12 @@ def main(params):
                                                        list(agent.sender_embedding.parameters()) + \
                                                        list(agent.sender_cells.parameters())
 
+            loss_weights["agent_{}".format(i)]= {"self":0.,"cross":1.,"imitation":0.}
+
             if i==0:
-                loss_weights["agent_{}".format(i)]= {"self":1.,"cross":0.,"imitation":0.}
-
-
                 listener_parameters["agent_{}".format(i)]=list(agent.agent_receiver.parameters()) + \
                                       list(agent.receiver_cell.parameters()) + \
                                       list(agent.receiver_embedding.parameters())
-
-            else:
-                loss_weights["agent_{}".format(i)]= {"self":0.,"cross":1.,"imitation":0.}
 
 
         game = DialogReinforceCompositionalityMultiAgent(Agents=agents,
@@ -436,9 +441,84 @@ def main(params):
 
 
         "Create trainer"
-
+        list_speakers=[i for i in range(opts.N_agents)]
+        list_listeners=[0]
         trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
-                                        N_agents=opts.N_agents,step_ratio=opts.step_ratio,train_data=train_loader, \
+                                        N_agents=opts.N_agents,list_speakers=list_speakers,list_listeners=list_listeners,\
+                                        step_ratio=opts.step_ratio,train_data=train_loader, \
+                                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+    elif opts.model=="2_speakers_N_listener":
+
+        agents={}
+        optim_params={}
+        loss_weights={}
+        speaker_parameters={}
+        listener_parameters={}
+
+        for i in range(opts.N_agents):
+
+            agent=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
+                                                    n_attributes=opts.n_attributes,
+                                                    n_values=opts.n_values,
+                                                    max_len=opts.max_len,
+                                                    embed_dim=opts.sender_embedding,
+                                                    sender_hidden_size=opts.sender_hidden,
+                                                    receiver_hidden_size=opts.receiver_hidden,
+                                                    sender_cell=opts.sender_cell,
+                                                    receiver_cell=opts.receiver_cell,
+                                                    sender_num_layers=opts.sender_num_layers,
+                                                    receiver_num_layers=opts.receiver_num_layers,
+                                                    force_eos=force_eos)
+
+            agents["agent_{}".format(i)] = agent
+
+            optim_params["agent_{}".format(i)] = {"length_cost":0.,
+                                                  "sender_entropy_coeff":opts.sender_entropy_coeff,
+                                                  "receiver_entropy_coeff":opts.receiver_entropy_coeff}
+
+            if i==0 or i==1:
+                speaker_parameters["agent_{}".format(i)]=list(agent.agent_sender.parameters()) + \
+                                                           list(agent.sender_norm_h.parameters()) + \
+                                                           list(agent.sender_norm_c.parameters()) + \
+                                                           list(agent.hidden_to_output.parameters()) + \
+                                                           list(agent.sender_embedding.parameters()) + \
+                                                           list(agent.sender_cells.parameters())
+
+
+            loss_weights["agent_{}".format(i)]= {"self":0.,"cross":1.,"imitation":0.}
+
+            listener_parameters["agent_{}".format(i)]=list(agent.agent_receiver.parameters()) + \
+                                      list(agent.receiver_cell.parameters()) + \
+                                      list(agent.receiver_embedding.parameters())
+
+
+        game = DialogReinforceCompositionalityMultiAgent(Agents=agents,
+                                                        n_attributes=opts.n_attributes,
+                                                        n_values=opts.n_values,
+                                                        loss_understanding=loss_understanding_compositionality,
+                                                        optim_params=optim_params,
+                                                        baseline_mode=opts.baseline_mode,
+                                                        reward_mode=opts.reward_mode,
+                                                        loss_weights=loss_weights,
+                                                        device=device)
+
+        # Optimizers
+        optimizer_speaker={}
+        optimizer_listener={}
+
+        for i in range(opts.N_agents):
+            if i==0 or i==1:
+                optimizer_speaker["agent_{}".format(i)] = core.build_optimizer(list(speaker_parameters["agent_{}".format(i)]),lr=opts.sender_lr)
+            optimizer_listener["agent_{}".format(i)] = core.build_optimizer(list(listener_parameters["agent_{}".format(i)]),lr=opts.receiver_lr)
+
+
+        "Create trainer"
+        list_speakers=[0,1]
+        list_listeners=[i for i in range(opts.N_agents)]
+        trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
+                                        N_agents=opts.N_agents,list_speakers=list_speakers,list_listeners=list_listeners,\
+                                        step_ratio=opts.step_ratio,train_data=train_loader, \
                                         validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
     else:
@@ -466,7 +546,10 @@ def main(params):
 
         print("Epoch: "+str(epoch))
         if epoch%10==0:
-            compute_similarity=True
+            if opts.N_agents<10:
+                compute_similarity=True
+            else:
+                compute_similarity=opts.compute_similarity
         else:
             compute_similarity=opts.compute_similarity
 
@@ -495,13 +578,13 @@ def main(params):
         print("Train")
         if epoch==0:
             messages=[np.zeros((opts.n_values**opts.n_attributes,opts.max_len)) for _ in range(opts.N_agents)]
-        messages,accuracy_vectors, similarity_messages = dump_compositionality_multiagent(trainer.game,compo_dataset,train_split, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages,compute_similarity=compute_similarity)
+        messages,accuracy_vectors, similarity_messages = dump_compositionality_multiagent(trainer.game,compo_dataset,train_split,list_speakers,list_listeners, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages,compute_similarity=compute_similarity)
         np_messages = {agent:convert_messages_to_numpy(messages[agent]) for agent in messages}
 
         print("Test")
         if epoch==0:
             messages_test=[np.zeros((opts.n_values**opts.n_attributes,opts.max_len)) for _ in range(opts.N_agents)]
-        messages_test,accuracy_vectors_test, similarity_messages_test = dump_compositionality_multiagent(trainer.game,compo_dataset,test_split, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages_test,compute_similarity=compute_similarity)
+        messages_test,accuracy_vectors_test, similarity_messages_test = dump_compositionality_multiagent(trainer.game,compo_dataset,test_split,list_speakers,list_listeners, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages_test,compute_similarity=compute_similarity)
         np_messages_test = {agent:convert_messages_to_numpy(messages_test[agent]) for agent in messages_test}
 
         # Save models
@@ -520,15 +603,23 @@ def main(params):
             np.save(opts.dir_save+'/training_info/similarity_languages_test_{}.npy'.format(epoch), similarity_messages_test)
 
         # Save accuracy/message results
-        messages_to_be_saved = np.stack([messages[agent] for agent in np_messages])
-        accuracy_vectors_to_be_saved = np.stack([accuracy_vectors[agent] for agent in accuracy_vectors])
+        messages_to_be_saved = np.stack([fill_to_max_len(np_messages[agent],opts.max_len) for agent in np_messages])
+        accuracy_vectors_to_be_saved = np.zeros((len(list_speakers),len(list_listeners),len(train_split),opts.n_attributes))
+        for i,agent_speaker in enumerate(accuracy_vectors):
+            for j,agent_listener in enumerate(accuracy_vectors[agent_speaker]):
+                accuracy_vectors_to_be_saved[i,j,:,:] = accuracy_vectors[agent_speaker][agent_listener]
+
 
         np.save(opts.dir_save+'/messages/messages_{}.npy'.format(epoch), messages_to_be_saved)
         np.save(opts.dir_save+'/accuracy/accuracy_{}.npy'.format(epoch), accuracy_vectors_to_be_saved)
 
         # Test set
-        messages_test_to_be_saved = np.stack([messages_test[agent] for agent in np_messages_test])
-        accuracy_vectors_test_to_be_saved = np.stack([accuracy_vectors_test[agent] for agent in accuracy_vectors_test])
+        messages_test_to_be_saved = np.stack([fill_to_max_len(np_messages_test[agent],opts.max_len) for agent in np_messages_test])
+        accuracy_vectors_to_be_saved = np.zeros((len(list_speakers),len(list_listeners),len(test_split),opts.n_attributes))
+        for i,agent_speaker in enumerate(accuracy_vectors):
+            for j,agent_listener in enumerate(accuracy_vectors[agent_speaker]):
+                accuracy_vectors_to_be_saved[i,j,:,:] = accuracy_vectors[agent_speaker][agent_listener]
+
         np.save(opts.dir_save+'/test/messages_test_{}.npy'.format(epoch), messages_test_to_be_saved)
         np.save(opts.dir_save+'/test/accuracy_test_{}.npy'.format(epoch), accuracy_vectors_test_to_be_saved)
 

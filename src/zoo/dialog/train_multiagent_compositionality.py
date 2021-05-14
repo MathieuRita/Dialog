@@ -188,7 +188,7 @@ def dump_compositionality_multiagent(game,compo_dataset,split,list_speakers,list
     dataset = [[torch.stack(dataset).to(device), None]]
 
     sender_inputs, messages, _ , receiver_outputs,labels = \
-        dump_multiagent_compositionality(game, dataset,list_speakers=list_speakers,list_listeners=list_listeners, device=device, variable_length=True)
+        dump_multiagent_compositionality(game, dataset,list_speakers,list_listeners, device=device, variable_length=True)
     # Rq. sender_inputs = list, messages = dict , receiver_outputs = dict
 
     n_messages = len(dataset[0][0])
@@ -197,6 +197,7 @@ def dump_compositionality_multiagent(game,compo_dataset,split,list_speakers,list
     "1. Accuracy"
 
     accuracy_vectors={}
+    accs_tot=[]
 
     for agent_speaker in messages:
 
@@ -213,7 +214,7 @@ def dump_compositionality_multiagent(game,compo_dataset,split,list_speakers,list
               correct=True
               if i<n_messages:
                   for j in range(len(list(combination[i]))):
-                    if receiver_outputs[agent_speaker][i][j]==list(combination[i])[j]:
+                    if receiver_outputs[agent_speaker][agent_listener][i][j]==list(combination[i])[j]:
                       unif_acc+=1
                       acc_vec[i,j]=1
                     else:
@@ -224,9 +225,10 @@ def dump_compositionality_multiagent(game,compo_dataset,split,list_speakers,list
             accuracy_vectors[agent_speaker][agent_listener] = acc_vec
             unif_acc /= (n_messages) * n_attributes
             unif_acc_general/=n_messages
+            accs_tot.append(unif_acc)
 
         #print(agent)
-        #print(json.dumps({'unif': unif_acc,'unif_general':unif_acc_general}))
+        print(json.dumps({'unif accuracy': np.mean(accs_tot)}))
 
     if compute_similarity:
         "2. Similarity messages"
@@ -615,10 +617,10 @@ def main(params):
 
         # Test set
         messages_test_to_be_saved = np.stack([fill_to_max_len(np_messages_test[agent],opts.max_len) for agent in np_messages_test])
-        accuracy_vectors_to_be_saved = np.zeros((len(list_speakers),len(list_listeners),len(test_split),opts.n_attributes))
+        accuracy_vectors_test_to_be_saved = np.zeros((len(list_speakers),len(list_listeners),len(test_split),opts.n_attributes))
         for i,agent_speaker in enumerate(accuracy_vectors):
             for j,agent_listener in enumerate(accuracy_vectors[agent_speaker]):
-                accuracy_vectors_to_be_saved[i,j,:,:] = accuracy_vectors[agent_speaker][agent_listener]
+                accuracy_vectors_test_to_be_saved[i,j,:,:] = accuracy_vectors[agent_speaker][agent_listener]
 
         np.save(opts.dir_save+'/test/messages_test_{}.npy'.format(epoch), messages_test_to_be_saved)
         np.save(opts.dir_save+'/test/accuracy_test_{}.npy'.format(epoch), accuracy_vectors_test_to_be_saved)

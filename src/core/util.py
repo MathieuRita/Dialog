@@ -1989,11 +1989,10 @@ def dump_multiagent_compositionality(game: torch.nn.Module,
             receiver_input = None if len(batch) == 2 else move_to(batch[2], device)
             outputs={}
 
-            receiver_outputs_agents["agent_{}".format(i)]={}
-
             for i in list_speakers:
                 message = game.agents["agent_{}".format(i)].send(sender_input)
                 message = message[0]
+                receiver_outputs_agents["agent_{}".format(i)]={}
 
                 for list in list_listeners:
 
@@ -2037,10 +2036,10 @@ def dump_multiagent_compositionality(game: torch.nn.Module,
             if batch[1] is not None:
                 labels.extend(batch[1])
 
-            if isinstance(sender_input, list) or isinstance(sender_input, tuple):
-                sender_inputs.extend(zip(*sender_input))
-            else:
-                sender_inputs.extend(sender_input)
+            #if isinstance(sender_input, list) or isinstance(sender_input, tuple):
+            #    sender_inputs.extend(zip(*sender_input))
+            #else:
+            sender_inputs.extend(sender_input)
 
             if receiver_input is not None:
                 receiver_inputs.extend(receiver_input)

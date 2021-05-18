@@ -618,9 +618,9 @@ def main(params):
         # Test set
         messages_test_to_be_saved = np.stack([fill_to_max_len(np_messages_test[agent],opts.max_len) for agent in np_messages_test])
         accuracy_vectors_test_to_be_saved = np.zeros((len(list_speakers),len(list_listeners),len(test_split),opts.n_attributes))
-        for i,agent_speaker in enumerate(accuracy_vectors):
-            for j,agent_listener in enumerate(accuracy_vectors[agent_speaker]):
-                accuracy_vectors_test_to_be_saved[i,j,:,:] = accuracy_vectors[agent_speaker][agent_listener]
+        for i,agent_speaker in enumerate(accuracy_vectors_test):
+            for j,agent_listener in enumerate(accuracy_vectors_test[agent_speaker]):
+                accuracy_vectors_test_to_be_saved[i,j,:,:] = accuracy_vectors_test[agent_speaker][agent_listener]
 
         np.save(opts.dir_save+'/test/messages_test_{}.npy'.format(epoch), messages_test_to_be_saved)
         np.save(opts.dir_save+'/test/accuracy_test_{}.npy'.format(epoch), accuracy_vectors_test_to_be_saved)

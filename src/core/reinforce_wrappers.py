@@ -3129,7 +3129,7 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
                 sender_input,
                 unused_labels,
                 sender_id,
-                receiver_id,
+                receiver_ids,
                 receiver_input=None):
 
         """
@@ -3141,32 +3141,37 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
 
         "0. Get sender and receiver (id + optim info) for playing the game"
         # Get sender_id and sender information
-        sender_id = sender_id
         agent_sender = self.agents["agent_{}".format(sender_id)]
         loss_weights_sender = self.loss_weights["agent_{}".format(sender_id)]
         optim_params_sender = self.optim_params["agent_{}".format(sender_id)]
 
         # Get receiver information (receiver_id always 0)
-        agent_receiver=self.agents["agent_{}".format(receiver_id)]
-        loss_weights_receiver = self.loss_weights["agent_{}".format(receiver_id)]
-        optim_params_receiver = self.optim_params["agent_{}".format(receiver_id)]
+        agent_receivers={"agent_{}".format(receiver_id):self.agents["agent_{}".format(receiver_id)] for receiver_id in receiver_ids}
 
-        " 1. Agent actions "
+        " 1. Agent actions and loss"
         # Message sending
         message, log_prob_s,whole_log_prob_s, entropy_s = agent_sender.send(sender_input,return_policies=True)
         message_lengths = find_lengths(message)
-        # Cross listening
-        receiver_output_cross, log_prob_r_cross, entropy_r_cross = agent_receiver.receive(message, receiver_input, message_lengths)
+
         # Self listening
         receiver_output_self, log_prob_r_self, entropy_r_self = agent_sender.receive(message, receiver_input, message_lengths)
+        loss_self, rest_self = self.loss_understanding(sender_input, receiver_output_self,self.n_attributes,self.n_values)
+
+        # Cross listening
+        losses_cross={}
+        restes_cross = {}
+        for agent in agent_receivers:
+            receiver_output_cross, log_prob_r_cross, entropy_r_cross = agent_receivers[agent].receive(message, receiver_input, message_lengths)
+            loss_cross, rest_cross = self.loss_understanding(sender_input, receiver_output_cross,self.n_attributes,self.n_values)
+            losses_cross[agent] = loss_cross
+            restes_cross[agent] = rest_cross
         # Imitation
         # NO IMITATION
 
 
-        "2. Losses computation"
-        loss_cross, rest_cross = self.loss_understanding(sender_input, receiver_output_cross,self.n_attributes,self.n_values)
+        "2. Reward computation"
 
-        loss_self, rest_self = self.loss_understanding(sender_input, receiver_output_self,self.n_attributes,self.n_values)
+        loss_cross= torch.stack([losses_cross[agent] for agent in losses_cross]).mean(0)# MEAN ACROSS AXIS
 
         # Average loss. Rk. Sortir loss_imitation de cette somme
         loss = loss_weights_sender["self"]*loss_self + loss_weights_sender["cross"]*loss_cross
@@ -3238,9 +3243,11 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         rest['sender_entropy_{}'.format(sender_id)] = entropy_s.mean().item()
         rest['mean_length_{}'.format(sender_id)] = message_lengths.float().mean().item()
         rest['loss_self_{}{}'.format(sender_id,sender_id)] = loss_self.mean().item()
-        rest['loss_cross_{}{}'.format(sender_id,receiver_id)] = loss_cross.mean().item()
+        for receiver_id in receiver_ids:
+            rest['loss_cross_{}{}'.format(sender_id,receiver_id)] = losses_cross["agent_{}".format(receiver_id)].mean().item()
         rest['acc_self_{}{}'.format(sender_id,sender_id)]=rest_self['acc'].mean().item()
-        rest['acc_cross_{}{}'.format(sender_id,receiver_id)]=rest_cross['acc'].mean().item()
+        for receiver_id in receiver_ids:
+            rest['acc_cross_{}{}'.format(sender_id,receiver_id)]=restes_cross["agent_{}".format(receiver_id)]['acc'].mean().item()
         rest['reinforce_term_{}'.format(sender_id)]=policy_loss.detach().item()
         rest['baseline_term_{}'.format(sender_id)]=(policy_loss/log_prob.mean()).detach().item()
         rest['policy_{}'.format(sender_id)]=whole_log_prob_s.detach()

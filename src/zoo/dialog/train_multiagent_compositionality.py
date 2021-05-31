@@ -136,6 +136,7 @@ def get_params(params):
     # MultiAgent
     parser.add_argument('--N_agents', type=int, default=3,help='Number agents')
     parser.add_argument('--compute_similarity', type=bool, default=False,help='Compute similarity')
+    parser.add_argument('--N_listener_sampled',type=int,default=1, help='Numbr of Listeners sampled at each step')
 
     args = core.init(parser, params)
 
@@ -520,7 +521,7 @@ def main(params):
         list_listeners=[i for i in range(opts.N_agents)]
         trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
                                         N_agents=opts.N_agents,list_speakers=list_speakers,list_listeners=list_listeners,\
-                                        step_ratio=opts.step_ratio,train_data=train_loader, \
+                                        N_listener_sampled = opts.N_listener_sampled,step_ratio=opts.step_ratio,train_data=train_loader, \
                                         validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
     else:

@@ -1153,6 +1153,7 @@ class TrainerDialogMultiAgent:
             step_ratio : float,
             list_speakers : list,
             list_listeners : list,
+            N_listener_sampled : int,
             train_data: DataLoader,
             validation_data: Optional[DataLoader] = None,
             device: torch.device = None,
@@ -1177,6 +1178,7 @@ class TrainerDialogMultiAgent:
         self.step_ratio=step_ratio
         self.list_speakers = list_speakers
         self.list_listeners = list_listeners
+        self.N_listener_sampled = N_listener_sampled
         common_opts = get_opts()
         self.validation_freq = common_opts.validation_freq
         self.device = common_opts.device if device is None else device
@@ -1254,21 +1256,23 @@ class TrainerDialogMultiAgent:
             batch = move_to(batch, self.device)
 
             # Choose the speaker that will play with listener
-            sender_id = self.list_speakers[randint(0,len(self.list_speakers)-1)]
-            receiver_id = self.list_listeners[randint(0,len(self.list_listeners)-1)]
+            sender_id = self.list_speakers[np.random.choice(len(self.list_speakers),1)[0]]
+            receiver_ids = [self.list_listeners[rand] for rand in np.random.choice(len(self.list_listeners),self.N_listener_sampled,replace=False)]
             prob_step = np.random.rand()
 
-            optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_id=receiver_id)
+            optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_ids=receiver_ids)
 
             if prob_step<=min(self.step_ratio,1):
                 self.optimizer_speaker["agent_{}".format(sender_id)].zero_grad()
             if prob_step<=min(1/self.step_ratio,1):
-                self.optimizer_listener["agent_{}".format(receiver_id)].zero_grad()
+                for receiver_id in receiver_ids:
+                    self.optimizer_listener["agent_{}".format(receiver_id)].zero_grad()
             optimized_loss.backward()
             if prob_step<=min(self.step_ratio,1):
                 self.optimizer_speaker["agent_{}".format(sender_id)].step()
             if prob_step<=min(1/self.step_ratio,1):
-                self.optimizer_listener["agent_{}".format(receiver_id)].step()
+                for receiver_id in receiver_ids:
+                    self.optimizer_listener["agent_{}".format(receiver_id)].step()
 
 
             mean_rest = _add_dicts_2(mean_rest, rest)

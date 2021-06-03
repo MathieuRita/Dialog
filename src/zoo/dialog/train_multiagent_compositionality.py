@@ -448,7 +448,7 @@ def main(params):
         list_listeners=[0]
         trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
                                         N_agents=opts.N_agents,list_speakers=list_speakers,list_listeners=list_listeners,\
-                                        step_ratio=opts.step_ratio,train_data=train_loader, \
+                                        N_listener_sampled = 1,step_ratio=opts.step_ratio,train_data=train_loader, \
                                         validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
     elif opts.model=="2_speakers_N_listener":

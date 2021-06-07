@@ -1149,7 +1149,6 @@ class TrainerDialogMultiAgent:
             game: torch.nn.Module,
             optimizer_speaker: dict,
             optimizer_listener: dict,
-            N_agents: int,
             step_ratio : float,
             list_speakers : list,
             list_listeners : list,
@@ -1174,7 +1173,6 @@ class TrainerDialogMultiAgent:
         self.optimizer_listener = optimizer_listener
         self.train_data = train_data
         self.validation_data = validation_data
-        self.N_agents = N_agents
         self.step_ratio=step_ratio
         self.list_speakers = list_speakers
         self.list_listeners = list_listeners

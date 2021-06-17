@@ -1951,10 +1951,10 @@ def sample_messages(agent: torch.nn.Module,
             sender_input = move_to(batch[0], device)
             receiver_input = None if len(batch) == 2 else move_to(batch[2], device)
 
-            message_1 = agent.send(sender_input,eval=False)
-            message_1 = message_1[0]
+            message = agent.send(sender_input,eval=False)
+            message = message_1[0]
 
-    return message_1
+    return message
 
 
 def dump_multiagent_compositionality(game: torch.nn.Module,

@@ -9,8 +9,10 @@ import numpy as np
 import os
 from os import path
 import itertools
+import pickle
 import torch.utils.data
 import torch.nn.functional as F
+from scipy.stats import entropy
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import src.core as core
 #from scipy.stats import entropy
@@ -35,7 +37,7 @@ from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,Trainer
 # MultiAgents
 from src.core.reinforce_wrappers import DialogReinforceCompositionalityMultiAgent
 from src.core.trainers import TrainerDialogMultiAgent
-from src.core.util import dump_multiagent_compositionality
+from src.core.util import dump_multiagent_compositionality,sample_messages
 
 
 def get_params(params):
@@ -136,7 +138,7 @@ def get_params(params):
     # Estimation
     parser.add_argument('--agents_weights', type=str,help='Path to agent weights')
     parser.add_argument('--dataset_split', type=str,help='Path to dataset split')
-    parser.add_argument('--n_sampling', type=str,help='Number of sampling iteration for estimation')
+    parser.add_argument('--n_sampling', type=int,help='Number of sampling iteration for estimation')
 
     args = core.init(parser, params)
 
@@ -148,6 +150,8 @@ def estimate_policy(agents,
                    n_sampling,
                    vocab_size,
                    max_len,
+                   n_attributes,
+                   n_values,
                    device):
 
     """
@@ -164,7 +168,11 @@ def estimate_policy(agents,
 
     dataset = [[torch.stack(dataset).to(device), None]]
 
-    policy=[{} for i in range(len(split))]
+    policies={}
+
+    for agent in agents:
+        policies[agent]=[{} for i in range(len(split))]
+    policies["mean_policy"]=[{} for i in range(len(split))]
 
     for _ in range(n_sampling):
         idx=np.random.choice(len(agents))
@@ -172,13 +180,20 @@ def estimate_policy(agents,
         messages = sample_messages(agent,dataset,device)
 
         for i,message in enumerate(messages):
-            message="".join([str(s) for s in message])
-            if message in policy[i]:
-                policy[i][message]+=1/n_sampling
+            message="".join([str(s.cpu().numpy()) for s in message])
+            # Individual policy
+            if message in policies["agent_{}".format(idx)][i]:
+                policies["agent_{}".format(idx)][i][message]+=1/n_sampling
             else:
-                policy[i][message]=1/n_sampling
+                policies["agent_{}".format(idx)][i][message]=1/n_sampling
 
-    return policy
+            # Mean policy
+            if message in policies["mean_policy"][i]:
+                policies["mean_policy"][i][message]+=1/n_sampling
+            else:
+                policies["mean_policy"][i][message]=1/n_sampling
+
+    return policies
 
 def fill_to_max_len(messages,max_len):
     lengths=[len(m) for m in messages]
@@ -299,16 +314,17 @@ def main(params):
     force_eos = opts.force_eos == 1
 
 
-    print("Probability by attribute is:",probs_attributes)
-
-
     compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
 
     split = np.sort(np.load(opts.dataset_split))
 
+    with open(opts.agents_weights, "rb") as fp:
+        agents_weights = pickle.load(fp)
+
+
     agents={}
 
-    for i in range(len(opts.agents_weights)):
+    for i in range(len(agents_weights)):
 
 
         agent=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
@@ -324,21 +340,30 @@ def main(params):
                                                 receiver_num_layers=opts.receiver_num_layers,
                                                 force_eos=force_eos)
 
-        agent.load_state_dict(torch.load(opts.agents_weights[i],map_location=torch.device('cpu')))
+        agent.load_state_dict(torch.load(agents_weights[i],map_location=torch.device('cpu')))
         agent.to(device)
         agents["agent_{}".format(i)] = agent
 
         #(agent,compo_dataset,split,n_sampling,vocab_size,max_len,device)
 
-    mean_policy = estimate_mean_policy(agents=agents,
+    policies = estimate_policy(agents=agents,
                                        compo_dataset=compo_dataset,
                                        split=split,
                                        n_sampling=opts.n_sampling,
                                        vocab_size=opts.vocab_size,
                                        max_len=opts.max_len,
+                                       n_attributes=opts.n_attributes,
+                                       n_values=opts.n_values,
                                        device=device)
 
-    np.save(opts.dir_save+'/training_info/mean_policy.npy',mean_policy.cpu().numpy())
+    for agent in policies:
+        mean_entropy=0.
+        for i in range(len(policies[agent])):
+          probs=[policies[agent][i][m] for m in policies[agent][i]]
+          mean_entropy+=entropy(probs,base=10)
+        mean_entropy/=len(policies[agent])
+
+        np.save(opts.dir_save+'/training_info/entropy_{}.npy'.format(agent),np.array(mean_entropy))
 
     core.close()
 

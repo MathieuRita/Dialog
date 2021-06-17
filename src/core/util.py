@@ -1952,7 +1952,7 @@ def sample_messages(agent: torch.nn.Module,
             receiver_input = None if len(batch) == 2 else move_to(batch[2], device)
 
             message = agent.send(sender_input,eval=False)
-            message = message_1[0]
+            message = message[0]
 
     return message
 

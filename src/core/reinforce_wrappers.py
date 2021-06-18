@@ -1340,7 +1340,7 @@ class AgentBaselineCompositionality(nn.Module):
         else:
             return sequence,logits, entropy
 
-    def receive(self,message, receiver_input, message_lengths):
+    def receive(self,message, receiver_input, message_lengths,return_policies=False):
 
       emb = self.receiver_embedding(message)
 
@@ -1373,7 +1373,10 @@ class AgentBaselineCompositionality(nn.Module):
       entropy = torch.stack(entropy).permute(1, 0)
       slogits = torch.stack(slogits).permute(1, 0)
 
-      return agent_output, slogits, entropy
+      if return_policies:
+          agent_output, slogits,logits, entropy
+      else:
+        return agent_output, slogits, entropy
 
     def imitate(self,x):
 
@@ -3161,7 +3164,7 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         losses_cross={}
         restes_cross = {}
         for agent in agent_receivers:
-            receiver_output_cross, log_prob_r_cross, entropy_r_cross = agent_receivers[agent].receive(message, receiver_input, message_lengths)
+            receiver_output_cross, log_prob_r_cross,whole_log_prob_r_cross, entropy_r_cross = agent_receivers[agent].receive(message, receiver_input, message_lengths,return_policies=True)
             loss_cross, rest_cross = self.loss_understanding(sender_input, receiver_output_cross,self.n_attributes,self.n_values)
             losses_cross[agent] = loss_cross
             restes_cross[agent] = rest_cross

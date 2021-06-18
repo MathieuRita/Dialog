@@ -1374,9 +1374,9 @@ class AgentBaselineCompositionality(nn.Module):
       slogits = torch.stack(slogits).permute(1, 0)
 
       if return_policies:
-          agent_output, slogits,logits, entropy
+          return agent_output, slogits,logits, entropy
       else:
-        return agent_output, slogits, entropy
+          return agent_output, slogits, entropy
 
     def imitate(self,x):
 

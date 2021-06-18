@@ -388,7 +388,7 @@ def main(params):
                   mean_entropy+=entropy(probs,base=10)
             mean_entropy/=(np.shape(policies[agent])[0]*np.shape(policies[agent])[1])
 
-            np.save(opts.dir_save+'/training_info/entropy_{}.npy'.format(agent),np.array(mean_entropy))
+            np.save(opts.dir_save+'/training_info/entropy_by_pos_{}.npy'.format(agent),np.array(mean_entropy))
 
     else:
         policies = estimate_policy(agents=agents,

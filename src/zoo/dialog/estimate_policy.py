@@ -145,8 +145,7 @@ def get_params(params):
 
     return args
 
-def estimate_policy(by_position=False,
-                   agents,
+def estimate_policy(agents,
                    compo_dataset,
                    split,
                    n_sampling,
@@ -154,7 +153,8 @@ def estimate_policy(by_position=False,
                    max_len,
                    n_attributes,
                    n_values,
-                   device):
+                   device,
+                   by_position=False):
 
     """
     Estimate agent (speaker module) policies based on message samples
@@ -175,8 +175,8 @@ def estimate_policy(by_position=False,
     if by_position:
 
         for agent in agents:
-            policies[agent]=np.zeros(len(split),max_len,vocab_size)
-        policies["mean_policy"]=np.zeros(len(split),max_len,vocab_size)
+            policies[agent]=np.zeros((len(split),max_len,vocab_size))
+        policies["mean_policy"]=np.zeros((len(split),max_len,vocab_size))
 
         for _ in range(n_sampling):
             idx=np.random.choice(len(agents))
@@ -370,14 +370,15 @@ def main(params):
     if opts.by_position:
 
         policies = estimate_policy(agents=agents,
-                                           compo_dataset=compo_dataset,
-                                           split=split,
-                                           n_sampling=opts.n_sampling,
-                                           vocab_size=opts.vocab_size,
-                                           max_len=opts.max_len,
-                                           n_attributes=opts.n_attributes,
-                                           n_values=opts.n_values,
-                                           device=device)
+                                   compo_dataset=compo_dataset,
+                                   split=split,
+                                   n_sampling=opts.n_sampling,
+                                   vocab_size=opts.vocab_size,
+                                   max_len=opts.max_len,
+                                   n_attributes=opts.n_attributes,
+                                   n_values=opts.n_values,
+                                   device=device,
+                                   by_position=True)
 
         for agent in policies:
             mean_entropy=0.
@@ -391,14 +392,14 @@ def main(params):
 
     else:
         policies = estimate_policy(agents=agents,
-                                           compo_dataset=compo_dataset,
-                                           split=split,
-                                           n_sampling=opts.n_sampling,
-                                           vocab_size=opts.vocab_size,
-                                           max_len=opts.max_len,
-                                           n_attributes=opts.n_attributes,
-                                           n_values=opts.n_values,
-                                           device=device)
+                                   compo_dataset=compo_dataset,
+                                   split=split,
+                                   n_sampling=opts.n_sampling,
+                                   vocab_size=opts.vocab_size,
+                                   max_len=opts.max_len,
+                                   n_attributes=opts.n_attributes,
+                                   n_values=opts.n_values,
+                                   device=device)
 
         for agent in policies:
             mean_entropy=0.

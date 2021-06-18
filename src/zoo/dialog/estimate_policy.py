@@ -139,12 +139,14 @@ def get_params(params):
     parser.add_argument('--agents_weights', type=str,help='Path to agent weights')
     parser.add_argument('--dataset_split', type=str,help='Path to dataset split')
     parser.add_argument('--n_sampling', type=int,help='Number of sampling iteration for estimation')
+    parser.add_argument('--by_position', type=bool,help='Measure entropy by position')
 
     args = core.init(parser, params)
 
     return args
 
-def estimate_policy(agents,
+def estimate_policy(by_position=False,
+                   agents,
                    compo_dataset,
                    split,
                    n_sampling,
@@ -170,28 +172,47 @@ def estimate_policy(agents,
 
     policies={}
 
-    for agent in agents:
-        policies[agent]=[{} for i in range(len(split))]
-    policies["mean_policy"]=[{} for i in range(len(split))]
+    if by_position:
 
-    for _ in range(n_sampling):
-        idx=np.random.choice(len(agents))
-        agent=agents["agent_{}".format(idx)]
-        messages = sample_messages(agent,dataset,device)
+        for agent in agents:
+            policies[agent]=np.zeros(len(split),max_len,vocab_size)
+        policies["mean_policy"]=np.zeros(len(split),max_len,vocab_size)
 
-        for i,message in enumerate(messages):
-            message="".join([str(s.cpu().numpy()) for s in message])
-            # Individual policy
-            if message in policies["agent_{}".format(idx)][i]:
-                policies["agent_{}".format(idx)][i][message]+=1/n_sampling
-            else:
-                policies["agent_{}".format(idx)][i][message]=1/n_sampling
+        for _ in range(n_sampling):
+            idx=np.random.choice(len(agents))
+            agent=agents["agent_{}".format(idx)]
+            messages = sample_messages(agent,dataset,device)
 
-            # Mean policy
-            if message in policies["mean_policy"][i]:
-                policies["mean_policy"][i][message]+=1/n_sampling
-            else:
-                policies["mean_policy"][i][message]=1/n_sampling
+            for i,message in enumerate(messages):
+                for j,symbol in enumerate(message):
+                    policies["agent_{}".format(idx)][i,j,symbol]+=1/n_sampling
+                    policies["mean_policy"][i,j,symbol]+=1/n_sampling
+
+
+    else:
+
+        for agent in agents:
+            policies[agent]=[{} for i in range(len(split))]
+        policies["mean_policy"]=[{} for i in range(len(split))]
+
+        for _ in range(n_sampling):
+            idx=np.random.choice(len(agents))
+            agent=agents["agent_{}".format(idx)]
+            messages = sample_messages(agent,dataset,device)
+
+            for i,message in enumerate(messages):
+                message="".join([str(s.cpu().numpy()) for s in message])
+                # Individual policy
+                if message in policies["agent_{}".format(idx)][i]:
+                    policies["agent_{}".format(idx)][i][message]+=1/n_sampling
+                else:
+                    policies["agent_{}".format(idx)][i][message]=1/n_sampling
+
+                # Mean policy
+                if message in policies["mean_policy"][i]:
+                    policies["mean_policy"][i][message]+=1/n_sampling
+                else:
+                    policies["mean_policy"][i][message]=1/n_sampling
 
     return policies
 
@@ -346,24 +367,47 @@ def main(params):
 
         #(agent,compo_dataset,split,n_sampling,vocab_size,max_len,device)
 
-    policies = estimate_policy(agents=agents,
-                                       compo_dataset=compo_dataset,
-                                       split=split,
-                                       n_sampling=opts.n_sampling,
-                                       vocab_size=opts.vocab_size,
-                                       max_len=opts.max_len,
-                                       n_attributes=opts.n_attributes,
-                                       n_values=opts.n_values,
-                                       device=device)
+    if opts.by_position:
 
-    for agent in policies:
-        mean_entropy=0.
-        for i in range(len(policies[agent])):
-          probs=[policies[agent][i][m] for m in policies[agent][i]]
-          mean_entropy+=entropy(probs,base=10)
-        mean_entropy/=len(policies[agent])
+        policies = estimate_policy(agents=agents,
+                                           compo_dataset=compo_dataset,
+                                           split=split,
+                                           n_sampling=opts.n_sampling,
+                                           vocab_size=opts.vocab_size,
+                                           max_len=opts.max_len,
+                                           n_attributes=opts.n_attributes,
+                                           n_values=opts.n_values,
+                                           device=device)
 
-        np.save(opts.dir_save+'/training_info/entropy_{}.npy'.format(agent),np.array(mean_entropy))
+        for agent in policies:
+            mean_entropy=0.
+            for i in range(np.shape(policies[agent])[0]):
+                for j in range(np.shape(policies[agent])[1]):
+                  probs=[policies[agent][i,j,k] for k in range(np.shape(policies[agent])[2])]
+                  mean_entropy+=entropy(probs,base=10)
+            mean_entropy/=(np.shape(policies[agent])[0]*np.shape(policies[agent])[1])
+
+            np.save(opts.dir_save+'/training_info/entropy_{}.npy'.format(agent),np.array(mean_entropy))
+
+    else:
+        policies = estimate_policy(agents=agents,
+                                           compo_dataset=compo_dataset,
+                                           split=split,
+                                           n_sampling=opts.n_sampling,
+                                           vocab_size=opts.vocab_size,
+                                           max_len=opts.max_len,
+                                           n_attributes=opts.n_attributes,
+                                           n_values=opts.n_values,
+                                           device=device)
+
+        for agent in policies:
+            mean_entropy=0.
+            for i in range(len(policies[agent])):
+              probs=[policies[agent][i][m] for m in policies[agent][i]]
+              mean_entropy+=entropy(probs,base=10)
+            mean_entropy/=len(policies[agent])
+
+            np.save(opts.dir_save+'/training_info/entropy_{}.npy'.format(agent),np.array(mean_entropy))
 
     core.close()
 

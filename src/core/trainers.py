@@ -1153,6 +1153,7 @@ class TrainerDialogMultiAgent:
             list_speakers : list,
             list_listeners : list,
             N_listener_sampled : int,
+            save_probs_eval : str,
             train_data: DataLoader,
             validation_data: Optional[DataLoader] = None,
             device: torch.device = None,
@@ -1177,6 +1178,8 @@ class TrainerDialogMultiAgent:
         self.list_speakers = list_speakers
         self.list_listeners = list_listeners
         self.N_listener_sampled = N_listener_sampled
+        self.save_probs_eval=save_probs_eval
+        self.epoch=0
         common_opts = get_opts()
         self.validation_freq = common_opts.validation_freq
         self.device = common_opts.device if device is None else device
@@ -1235,7 +1238,7 @@ class TrainerDialogMultiAgent:
                 for sender_id in self.list_speakers:
                   for receiver_id in self.list_listeners:
                       batch = move_to(batch, self.device)
-                      optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_ids=[receiver_id])
+                      optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_ids=[receiver_id],save_probs=self.save_probs_eval+"epoch_"+str(self.epoch))
                       mean_loss += optimized_loss
                       mean_rest = _add_dicts_2(mean_rest, rest)
                       n_batches += 1
@@ -1281,6 +1284,7 @@ class TrainerDialogMultiAgent:
 
         mean_loss /= n_batches
         mean_rest = _div_dict(mean_rest, n_batches)
+        self.epoch+=1
         return mean_loss.item(), mean_rest
 
     def train(self, n_epochs):

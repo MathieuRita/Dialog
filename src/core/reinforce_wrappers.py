@@ -3133,7 +3133,8 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
                 unused_labels,
                 sender_id,
                 receiver_ids,
-                receiver_input=None):
+                receiver_input=None,
+                save_probs=None):
 
         """
         Inputs:
@@ -3168,6 +3169,9 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
             loss_cross, rest_cross = self.loss_understanding(sender_input, receiver_output_cross,self.n_attributes,self.n_values)
             losses_cross[agent] = loss_cross
             restes_cross[agent] = rest_cross
+
+            if save_probs:
+                np.save(save_probs+"_receiver_probs_"+agent+".npy",whole_log_prob_r_cross.cpu().numpy())
         # Imitation
         # NO IMITATION
 
@@ -3254,6 +3258,12 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         rest['reinforce_term_{}'.format(sender_id)]=policy_loss.detach().item()
         rest['baseline_term_{}'.format(sender_id)]=(policy_loss/log_prob.mean()).detach().item()
         rest['policy_{}'.format(sender_id)]=whole_log_prob_s.detach()
+
+        "7. Save probs"
+        if save_probs:
+            np.save(save_probs+"_sender_input.npy",sender_input.cpu().numpy())
+            np.save(save_probs+"_message.npy",message.cpu().numpy())
+            np.save(save_probs+"_sender_probs.npy",whole_log_prob_s.cpu().numpy())
 
         return optimized_loss, rest
 

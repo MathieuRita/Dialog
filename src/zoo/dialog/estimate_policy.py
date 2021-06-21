@@ -436,8 +436,8 @@ def main(params):
                         mean_L2+=np.sum((np.array(probs_1)-np.array(probs_2))**2)
                   mean_KL/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
                   mean_L2/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
-                  KL_mean_mat[0,a2]=mean_KL
-                  L2_mean_mat[0,a2]=mean_L2
+                  KL_mean_mat[a2]=mean_KL
+                  L2_mean_mat[a2]=mean_L2
 
         np.save(opts.dir_save+'/training_info/KLdiv_meanpol.npy',np.array(KL_mean_mat))
         np.save(opts.dir_save+'/training_info/L2_meanpol.npy',np.array(L2_mean_mat))

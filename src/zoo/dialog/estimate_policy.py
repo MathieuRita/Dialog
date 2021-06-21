@@ -145,6 +145,17 @@ def get_params(params):
 
     return args
 
+def KL(a, b):
+    eps=1e-10
+    a = np.asarray(a, dtype=np.float)
+    b = np.asarray(b, dtype=np.float)
+    a_b=np.where(b!=0,a / b , eps)
+    print(a_b)
+
+    kl=np.where(a != 0,a * np.log(a_b) , 0)
+
+    return np.sum(kl)
+
 def estimate_policy(agents,
                    compo_dataset,
                    split,
@@ -409,6 +420,21 @@ def main(params):
             mean_entropy/=len(policies[agent])
 
             np.save(opts.dir_save+'/training_info/entropy_{}.npy'.format(agent),np.array(mean_entropy))
+
+        KL_mat = np.zeros((len(policies),len(policies)))
+
+        for a1,agent_1 in enumerate(policies):
+            for a2,agent_2 in enumerate(policies):
+                mean_KL=0.
+                for i in range(len(policies[agent])):
+                  probs_1=[policies[agent_1][i][m] for m in policies[agent_1][i]]
+                  probs_2=[policies[agent_1][i][m] for m in policies[agent_1][i]]
+                  mean_KL+=KL(probs_1,probs_2)
+                mean_KL/=len(policies[agent])
+                KL_mat[a1,a2]=mean_KL
+
+        np.save(opts.dir_save+'/training_info/KLdiv.npy',np.array(KL_mat))
+
 
     core.close()
 

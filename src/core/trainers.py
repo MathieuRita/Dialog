@@ -1238,7 +1238,11 @@ class TrainerDialogMultiAgent:
                 for sender_id in self.list_speakers:
                   for receiver_id in self.list_listeners:
                       batch = move_to(batch, self.device)
-                      optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_ids=[receiver_id],save_probs=self.save_probs_eval+"epoch_"+str(self.epoch))
+                      if self.save_probs_eval:
+                          save_probs=self.save_probs_eval+"epoch_"+str(self.epoch)
+                      else:
+                          save_probs=self.save_probs_eval
+                      optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_ids=[receiver_id],save_probs=save_probs)
                       mean_loss += optimized_loss
                       mean_rest = _add_dicts_2(mean_rest, rest)
                       n_batches += 1

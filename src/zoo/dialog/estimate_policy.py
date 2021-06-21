@@ -399,20 +399,48 @@ def main(params):
             np.save(opts.dir_save+'/training_info/entropy_by_pos_{}.npy'.format(agent),np.array(mean_entropy))
 
         KL_mat = np.zeros((len(policies)-1,len(policies)-1))
+        L2_mat = np.zeros((len(policies)-1,len(policies)-1))
 
         for a1,agent_1 in enumerate(policies):
             for a2,agent_2 in enumerate(policies):
               if agent_1!="mean_policy" and agent_2!="mean_policy":
                   mean_KL=0.
+                  mean_L2=0.
                   for i in range(len(policies[agent_1])):
                       for j in range(np.shape(policies[agent_1])[1]):
                         probs_1=[policies[agent_1][i,j,k] for k in range(np.shape(policies[agent_1])[2])]
                         probs_2=[policies[agent_2][i,j,k] for k in range(np.shape(policies[agent_2])[2])]
                         mean_KL+=entropy(np.array(probs_1)+1e-16,qk=np.array(probs_2)+1e-16,base=10)
+                        mean_L2+=np.sum((np.array(probs_1)-np.array(probs_2))**2)
                   mean_KL/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
+                  mean_L2/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
                   KL_mat[a1,a2]=mean_KL
+                  L2_mat[a1,a2]=mean_L2
 
         np.save(opts.dir_save+'/training_info/KLdiv.npy',np.array(KL_mat))
+        np.save(opts.dir_save+'/training_info/L2.npy',np.array(L2_mat))
+
+        KL_mean_mat = np.zeros((len(policies)-1))
+        L2_mean_mat = np.zeros((len(policies)-1))
+
+        for a1,agent_1 in enumerate(policies):
+            for a2,agent_2 in enumerate(policies):
+              if agent_1=="mean_policy" and agent_2!="mean_policy":
+                  mean_KL=0.
+                  mean_L2=0.
+                  for i in range(len(policies[agent_1])):
+                      for j in range(np.shape(policies[agent_1])[1]):
+                        probs_1=[policies[agent_1][i,j,k] for k in range(np.shape(policies[agent_1])[2])]
+                        probs_2=[policies[agent_2][i,j,k] for k in range(np.shape(policies[agent_2])[2])]
+                        mean_KL+=entropy(np.array(probs_1)+1e-16,qk=np.array(probs_2)+1e-16,base=10)
+                        mean_L2+=np.sum((np.array(probs_1)-np.array(probs_2))**2)
+                  mean_KL/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
+                  mean_L2/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
+                  KL_mean_mat[0,a2]=mean_KL
+                  L2_mean_mat[0,a2]=mean_L2
+
+        np.save(opts.dir_save+'/training_info/KLdiv_meanpol.npy',np.array(KL_mean_mat))
+        np.save(opts.dir_save+'/training_info/L2_meanpol.npy',np.array(L2_mean_mat))
 
 
     else:

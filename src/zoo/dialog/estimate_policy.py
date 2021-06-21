@@ -408,7 +408,7 @@ def main(params):
                       for j in range(np.shape(policies[agent_1])[1]):
                         probs_1=[policies[agent_1][i,j,k] for k in range(np.shape(policies[agent_1])[2])]
                         probs_2=[policies[agent_2][i,j,k] for k in range(np.shape(policies[agent_2])[2])]
-                        mean_KL+=KL(probs_1,probs_2)
+                        mean_KL+=entropy(np.array(probs_1)+1e-16,qk=np.array(probs_2)+1e-16,base=10)
                   mean_KL/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
                   KL_mat[a1,a2]=mean_KL
 

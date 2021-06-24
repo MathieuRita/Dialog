@@ -3194,7 +3194,7 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         elif self.reward_mode=="dense":
             reward_self = 1.*(rest_self["acc"].sum(1)==self.n_attributes).detach()
             reward_cross = 1.*(rest_cross["acc"].sum(1)==self.n_attributes).detach()
-        elif self.reward_mode=="dense":
+        elif self.reward_mode=="discrete":
             reward_self = rest_self["acc"].sum(1).detach()
             reward_cross = rest_cross["acc"].sum(1).detach()
 

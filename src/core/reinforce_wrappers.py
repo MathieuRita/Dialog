@@ -1340,7 +1340,7 @@ class AgentBaselineCompositionality(nn.Module):
         else:
             return sequence,logits, entropy
 
-    def receive(self,message, receiver_input, message_lengths,return_policies=False):
+    def receive(self,message, receiver_input, message_lengths,return_policies=False,return_sample=False):
 
       emb = self.receiver_embedding(message)
 
@@ -1361,19 +1361,24 @@ class AgentBaselineCompositionality(nn.Module):
 
       entropy=[]
       slogits= []
+      sample = []
       for i in range(logits.size(1)):
         distr = Categorical(logits=logits[:,i,:])
         entropy.append(distr.entropy())
         if self.training:
             x = distr.sample()
+            sample.append(x)
         else:
             x = logits[:,i,:].argmax(dim=1)
         slogits.append(distr.log_prob(x))
 
       entropy = torch.stack(entropy).permute(1, 0)
       slogits = torch.stack(slogits).permute(1, 0)
+      sample = torch.stack(sample).permute(1, 0)
 
-      if return_policies:
+      if return_sample:
+          return sample, agent_output, slogits,logits, entropy
+      elif return_policies:
           return agent_output, slogits,logits, entropy
       else:
           return agent_output, slogits, entropy
@@ -3165,7 +3170,10 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         losses_cross={}
         restes_cross = {}
         for agent in agent_receivers:
-            receiver_output_cross, log_prob_r_cross,whole_log_prob_r_cross, entropy_r_cross = agent_receivers[agent].receive(message, receiver_input, message_lengths,return_policies=True)
+            if self.reward_mode=="dense":
+                sample, receiver_output_cross, log_prob_r_cross,whole_log_prob_r_cross, entropy_r_cross = agent_receivers[agent].receive(message, receiver_input, message_lengths,return_sample=True)
+            else:
+                receiver_output_cross, log_prob_r_cross,whole_log_prob_r_cross, entropy_r_cross = agent_receivers[agent].receive(message, receiver_input, message_lengths,return_policies=True)
             loss_cross, rest_cross = self.loss_understanding(sender_input, receiver_output_cross,self.n_attributes,self.n_values)
             losses_cross[agent] = loss_cross
             restes_cross[agent] = rest_cross
@@ -3193,7 +3201,8 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
             reward_cross = torch.exp(-loss_cross.detach())
         elif self.reward_mode=="dense":
             reward_self = 1.*(rest_self["acc"].sum(1)==self.n_attributes).detach()
-            reward_cross = 1.*(rest_cross["acc"].sum(1)==self.n_attributes).detach()
+            #reward_cross = 1.*(rest_cross["acc"].sum(1)==self.n_attributes).detach()
+            reward_cross = 1.*(sample == sender_input.argmax(2)).sum(1).detach()
         elif self.reward_mode=="discrete":
             reward_self = rest_self["acc"].sum(1).detach()
             reward_cross = rest_cross["acc"].sum(1).detach()

@@ -3236,9 +3236,9 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
             policy_length_loss = ((length_loss.float() - self.mean_baseline['length_{}'.format(sender_id)]) * effective_log_prob_s).mean()
 
         elif self.baseline_mode=="new":
-
-            policy_loss_self = -((reward_self - reward_self.mean())/(reward_self.std()) * log_prob).mean()
-            policy_loss_cross = -((reward_cross - reward_cross.mean())/(reward_cross.std())  * log_prob).mean()
+            eps=1e-16
+            policy_loss_self = -((reward_self - reward_self.mean())/(reward_self.std()+eps) * log_prob).mean()
+            policy_loss_cross = -((reward_cross - reward_cross.mean())/(reward_cross.std()+eps)  * log_prob).mean()
             policy_length_loss = ((length_loss.float() - length_loss.float().mean())  * effective_log_prob_s).mean()
 
         " 5. Final loss"

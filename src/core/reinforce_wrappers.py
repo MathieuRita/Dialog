@@ -1366,7 +1366,8 @@ class AgentBaselineCompositionality(nn.Module):
         distr = Categorical(logits=logits[:,i,:])
         entropy.append(distr.entropy())
         if self.training:
-            x = distr.sample()
+            #x = distr.sample()
+            x = logits[:,i,:].argmax(dim=1)
             sample.append(x)
         else:
             x = logits[:,i,:].argmax(dim=1)

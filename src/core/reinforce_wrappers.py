@@ -3201,7 +3201,12 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
             reward_cross = torch.exp(-loss_cross.detach())
         elif self.reward_mode=="dense":
             reward_self = 1.*(rest_self["acc"].sum(1)==self.n_attributes).detach()
-            #reward_cross = 1.*(rest_cross["acc"].sum(1)==self.n_attributes).detach()
+            reward_cross=[]
+            for agent in agent_receivers:
+                reward_cross.append(1.*(rest_cross["acc"].sum(1)==self.n_attributes).detach())
+                reward_cross=torch.stack(reward_cross)
+                reward_cross=reward_cross.mean(0)
+                #reward_cross = 1.*(rest_cross["acc"].sum(1)==self.n_attributes).detach()
             reward_cross = 1.*(sample == sender_input.reshape([sample.size(0),sample.size(1),sender_input.size(1)//sample.size(1)]).argmax(2)).float().mean(1).detach()
         elif self.reward_mode=="discrete":
             reward_self = rest_self["acc"].sum(1).detach()

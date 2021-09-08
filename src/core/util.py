@@ -1956,6 +1956,43 @@ def sample_messages(agent: torch.nn.Module,
 
     return message
 
+def estimate_listener_policy(speaker: torch.nn.Module,
+                             listener: torch.nn.Module,
+                             dataset: 'torch.utils.data.DataLoader',
+                             device: Optional[torch.device] = None):
+    """
+    A tool to dump the interaction between Sender and Receiver
+    :param game: A Game instance
+    :param dataset: Dataset of inputs to be used when analyzing the communication
+    :param gs: whether Gumbel-Softmax relaxation was used during training
+    :param variable_length: whether variable-length communication is used
+    :param device: device (e.g. 'cuda') to be used
+    :return:
+    """
+
+    device = device if device is not None else common_opts.device
+
+    with torch.no_grad():
+        for batch in dataset:
+            # by agreement, each batch is (sender_input, labels) plus optional (receiver_input)
+            sender_input = move_to(batch[0], device)
+            receiver_input = None if len(batch) == 2 else move_to(batch[2], device)
+
+            message = speaker.send(sender_input,eval=False)
+            message = message[0]
+
+            message_lengths = find_lengths(message)
+
+            _, _,logits, _ = listener.receive(message,None, message_lengths,return_policies=True)
+
+            
+
+
+
+
+
+    return message
+
 
 def dump_multiagent_compositionality(game: torch.nn.Module,
                                  dataset: 'torch.utils.data.DataLoader',

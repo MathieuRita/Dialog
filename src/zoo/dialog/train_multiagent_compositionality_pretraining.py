@@ -30,7 +30,7 @@ from src.core.trainers import TrainerDialogModel1, TrainerDialogModel2, TrainerD
 
 # Compo
 from src.core.reinforce_wrappers import DialogReinforceCompositionality, AgentBaselineCompositionality, DialogReinforceCompositionalitySingleListener
-from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,TrainerDialogAsymLR,TrainerDialogAsymStep
+from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,TrainerDialogAsymLR,TrainerDialogAsymStep,TrainerDialogMultiAgentPretraining
 
 # MultiAgents
 from src.core.reinforce_wrappers import DialogReinforceCompositionalityMultiAgent

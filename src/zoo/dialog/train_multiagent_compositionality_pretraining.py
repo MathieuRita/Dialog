@@ -410,6 +410,8 @@ def main(params):
 
     # Pretraining
 
+    print("Pretraining")
+
     for epoch in range(10):
         # Train
         list_train_loss,list_train_rest = trainer.train(n_epochs=1,pretraining=True)
@@ -422,6 +424,7 @@ def main(params):
         messages,accuracy_vectors, similarity_messages = dump_compositionality_multiagent(trainer.game,compo_dataset,train_split,list_speakers,list_listeners, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages,compute_similarity=compute_similarity)
         np_messages = {agent:convert_messages_to_numpy(messages[agent]) for agent in messages}
 
+    print("Interactions")
 
     for epoch in range(int(opts.n_epochs)):
 

@@ -1155,6 +1155,8 @@ class TrainerDialogMultiAgent:
             N_listener_sampled : int,
             save_probs_eval : str,
             train_data: DataLoader,
+            Ks_speakers : list,
+            Ks_listeners: list,
             validation_data: Optional[DataLoader] = None,
             device: torch.device = None,
             callbacks: Optional[List[Callback]] = None
@@ -1177,6 +1179,8 @@ class TrainerDialogMultiAgent:
         self.step_ratio=step_ratio
         self.list_speakers = list_speakers
         self.list_listeners = list_listeners
+        self.Ks_speakers = Ks_speakers
+        self.Ks_listeners = Ks_listeners
         self.N_listener_sampled = N_listener_sampled
         self.save_probs_eval=save_probs_eval
         self.epoch=0
@@ -1267,16 +1271,22 @@ class TrainerDialogMultiAgent:
 
             optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_ids=receiver_ids)
 
-            if prob_step<=min(self.step_ratio,1):
+            K_speaker = self.Ks_speakers[sender_id]
+
+            #if prob_step<=min(self.step_ratio,1):
+            if prob_step<=K_speaker:
                 self.optimizer_speaker["agent_{}".format(sender_id)].zero_grad()
-            if prob_step<=min(1/self.step_ratio,1):
-                for receiver_id in receiver_ids:
+            for receiver_id in receiver_ids:
+                K_listener = self.Ks_listeners[receiver_id]
+                #if prob_step<=min(1/self.step_ratio,1):
                     self.optimizer_listener["agent_{}".format(receiver_id)].zero_grad()
             optimized_loss.backward()
-            if prob_step<=min(self.step_ratio,1):
+            #if prob_step<=min(self.step_ratio,1):
+            if prob_step<=K_speaker:
                 self.optimizer_speaker["agent_{}".format(sender_id)].step()
-            if prob_step<=min(1/self.step_ratio,1):
-                for receiver_id in receiver_ids:
+            #if prob_step<=min(1/self.step_ratio,1):
+            for receiver_id in receiver_ids:
+                K_listener = self.Ks_listeners[receiver_id]
                     self.optimizer_listener["agent_{}".format(receiver_id)].step()
 
 
@@ -1465,7 +1475,7 @@ class TrainerDialogMultiAgentPretraining:
 
             for sender_id in range(len(self.list_speakers)):
 
-                receiver_id = [sender_id]
+                receiver_ids = [sender_id]
 
                 for iter,batch in enumerate(self.train_data):
 

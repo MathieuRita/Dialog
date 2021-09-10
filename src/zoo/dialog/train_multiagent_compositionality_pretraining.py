@@ -413,6 +413,9 @@ def main(params):
     print("Pretraining")
 
     for epoch in range(10):
+
+        compute_similarity=True
+
         # Train
         list_train_loss,list_train_rest = trainer.train(n_epochs=1,pretraining=True)
 

@@ -139,6 +139,7 @@ def get_params(params):
     parser.add_argument('--compute_similarity', type=bool, default=False,help='Compute similarity')
     parser.add_argument('--N_listener_sampled',type=int,default=1, help='Numbr of Listeners sampled at each step')
     parser.add_argument('--save_probs',type=str,default=None, help='Save probs during inference')
+    parser.add_argument('--K_random',type=bool,default=False, help='Save probs during inference')
 
     args = core.init(parser, params)
 
@@ -594,12 +595,20 @@ def main(params):
                 optimizer_listener["agent_{}".format(i)] = core.build_optimizer(list(listener_parameters["agent_{}".format(i)]),lr=opts.receiver_lr)
 
 
+        if K_random:
+            Ks_speakers = [np.random.rand() for _ in range(opts.N_speakers)]
+            Ks_listeners = [np.random.rand() for _ in range(opts.N_listeners)]
+        else:
+            Ks_speakers = [1]*opts.N_speakers
+            Ks_listeners = [1]*opts.N_listeners
+
         "Create trainer"
         list_speakers=[i for i in range(opts.N_speakers)]
         list_listeners=[i for i in range(opts.N_listeners)]
         trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
                                         list_speakers=list_speakers,list_listeners=list_listeners,save_probs_eval=opts.save_probs,\
                                         N_listener_sampled = opts.N_listener_sampled,step_ratio=opts.step_ratio,train_data=train_loader, \
+                                        Ks_speakers = Ks_speakers, Ks_listeners = Ks_listeners, \
                                         validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
     else:

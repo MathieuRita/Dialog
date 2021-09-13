@@ -139,7 +139,7 @@ def get_params(params):
     parser.add_argument('--compute_similarity', type=bool, default=False,help='Compute similarity')
     parser.add_argument('--N_listener_sampled',type=int,default=1, help='Numbr of Listeners sampled at each step')
     parser.add_argument('--save_probs',type=str,default=None, help='Save probs during inference')
-    parser.add_argument('--K_random',type=bool,default=False, help='Save probs during inference')
+    parser.add_argument('--K_random',type=int,default=0, help='Save probs during inference')
 
     args = core.init(parser, params)
 
@@ -595,7 +595,7 @@ def main(params):
                 optimizer_listener["agent_{}".format(i)] = core.build_optimizer(list(listener_parameters["agent_{}".format(i)]),lr=opts.receiver_lr)
 
 
-        if K_random:
+        if opts.K_random:
             Ks_speakers = [np.random.rand() for _ in range(opts.N_speakers)]
             Ks_listeners = [np.random.rand() for _ in range(opts.N_listeners)]
         else:
@@ -622,6 +622,9 @@ def main(params):
     # Save train split
     np.save(opts.dir_save+'/training_info/train_split.npy', train_split)
     np.save(opts.dir_save+'/training_info/test_split.npy', test_split)
+    np.save(opts.dir_save+'/training_info/Ks_speakers.npy', Ks_speakers)
+    np.save(opts.dir_save+'/training_info/Ks_listeners.npy', Ks_listeners)
+    
 
 
     # Main losses

@@ -37,7 +37,7 @@ from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,Trainer
 # MultiAgents
 from src.core.reinforce_wrappers import DialogReinforceCompositionalityMultiAgent
 from src.core.trainers import TrainerDialogMultiAgent
-from src.core.util import dump_multiagent_compositionality,sample_messages
+from src.core.util import dump_multiagent_compositionality,sample_messages, levenshtein, input_distance
 
 
 def get_params(params):
@@ -223,6 +223,83 @@ def estimate_policy(agents,
                     policies["mean_policy"][i][message]=1/n_sampling
 
     return policies
+
+def estimate_compositionality(agents,
+                               compo_dataset,
+                               split,
+                               n_sampling,
+                               n_indices,
+                               vocab_size,
+                               max_len,
+                               n_attributes,
+                               n_values,
+                               device,
+                               by_position=False):
+
+    """
+    Estimate agent (speaker module) policies based on message samples
+    """
+
+    BASE58 = '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'
+
+    dataset=[]
+    combination=[]
+
+    for i in range(len(compo_dataset)):
+        if i in split:
+          dataset.append(torch.from_numpy(compo_dataset[i]).float())
+          combination.append(np.reshape(compo_dataset[i],(n_attributes,n_values)).argmax(1))
+
+    dataset = [[torch.stack(dataset).to(device), None]]
+
+    agent_compositionality = []
+    input_space_distance = []
+    latent_space_distance = []
+
+    # 1. Sample messages
+    # 2. Select random pairs
+    # 3. Add input sim / latent sim to arrays
+
+    for agent_id in agents:
+
+        for _ in range(n_sampling):
+            agent=agents[agent_id]
+            messages = sample_messages(agent,dataset,device)
+
+            indices=np.reshape(np.random.randint(0,len(train_split),n_indices),(n_indices//2,2))
+
+            for k in range(len(indices)):
+
+                i=indices[k,0]
+                j=indices[k,1]
+
+                # Input space
+                input_space_distance.append(input_distance(combination[i],combination[j]))
+
+                # Latent space
+                s1=""
+                s2=""
+                message1=messages[i]
+                message2=messages[j]
+
+                for char1 in message1:
+                    if char1!=0 and char1!=-1:
+                        #s1+=str(char1)
+                        s1+=BASE58[int(char1)]
+
+                for char2 in message2:
+                    if char2!=0 and char2!=-1:
+                        #s2+=str(char2)
+                        s2+=BASE58[int(char2)]
+
+
+                latent_space_distance[k]=levenshtein(s1,s2)
+
+
+
+        agent_compositionality.append(spearmanr(input_space_distance,latent_space_distance).correlation)
+
+    return agent_compositionality
 
 def fill_to_max_len(messages,max_len):
     lengths=[len(m) for m in messages]
@@ -462,6 +539,19 @@ def main(params):
             mean_entropy/=len(policies[agent])
 
             np.save(opts.dir_save+'/training_info/entropy_{}.npy'.format(agent),np.array(mean_entropy))
+
+        compositionality = estimate_compositionality(agents=agents,
+                                                       compo_dataset=compo_dataset,
+                                                       split=split,
+                                                       n_sampling=opts.n_sampling,
+                                                       n_indices = 1000,
+                                                       vocab_size=opts.vocab_size,
+                                                       max_len=opts.max_len,
+                                                       n_attributes=opts.n_attributes,
+                                                       n_values=opts.n_values,
+                                                       device=device)
+
+        np.save(opts.dir_save+'/training_info/compositionality.npy',np.array(compositionality))
 
 
     core.close()

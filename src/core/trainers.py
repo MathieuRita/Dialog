@@ -1267,26 +1267,29 @@ class TrainerDialogMultiAgent:
             # Choose the speaker that will play with listener
             sender_id = self.list_speakers[np.random.choice(len(self.list_speakers),1)[0]]
             receiver_ids = [self.list_listeners[rand] for rand in np.random.choice(len(self.list_listeners),self.N_listener_sampled,replace=False)]
-            prob_step = np.random.rand()
+            prob_step_speaker = np.random.rand()
+            prob_step_listener = np.random.rand()
 
             optimized_loss, rest = self.game(*batch,sender_id=sender_id,receiver_ids=receiver_ids)
 
             K_speaker = self.Ks_speakers[sender_id]
 
             #if prob_step<=min(self.step_ratio,1):
-            if prob_step<=K_speaker:
+            if prob_step_speaker<=K_speaker:
                 self.optimizer_speaker["agent_{}".format(sender_id)].zero_grad()
             for receiver_id in receiver_ids:
                 K_listener = self.Ks_listeners[receiver_id]
+                if prob_step_listener<=K_listener:
                 #if prob_step<=min(1/self.step_ratio,1):
                     self.optimizer_listener["agent_{}".format(receiver_id)].zero_grad()
             optimized_loss.backward()
             #if prob_step<=min(self.step_ratio,1):
-            if prob_step<=K_speaker:
+            if prob_step_speaker<=K_speaker:
                 self.optimizer_speaker["agent_{}".format(sender_id)].step()
             #if prob_step<=min(1/self.step_ratio,1):
             for receiver_id in receiver_ids:
                 K_listener = self.Ks_listeners[receiver_id]
+                if prob_step_listener<=K_listener:
                     self.optimizer_listener["agent_{}".format(receiver_id)].step()
 
 

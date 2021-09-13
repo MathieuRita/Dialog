@@ -515,6 +515,13 @@ def levenshtein(s1, s2):
                 m[i, j] = min(m[i-1, j]+1, m[i, j-1]+1, m[i-1, j-1]+1)
     return m[len(s1), len(s2)]
 
+def input_distance(i1: list, i2:list):
+    dist=len(i1)
+    for k in range(len(i1)):
+        if i1[k]==i2[k]:
+            dist-=1
+    return dist
+
 def convert_messages_to_numpy(messages):
     all_messages=[]
     for x in messages:
@@ -1985,7 +1992,7 @@ def estimate_listener_policy(speaker: torch.nn.Module,
 
             _, _,logits, _ = listener.receive(message,None, message_lengths,return_policies=True)
 
-            
+
 
 
 

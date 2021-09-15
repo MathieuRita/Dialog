@@ -6,13 +6,12 @@
 import json
 import argparse
 import numpy as np
+from scipy.stats import spearmanr
 import os
 from os import path
 import itertools
-import pickle
 import torch.utils.data
 import torch.nn.functional as F
-from scipy.stats import entropy
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import src.core as core
 #from scipy.stats import entropy
@@ -36,8 +35,8 @@ from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,Trainer
 
 # MultiAgents
 from src.core.reinforce_wrappers import DialogReinforceCompositionalityMultiAgent
-from src.core.trainers import TrainerDialogMultiAgent
-from src.core.util import dump_multiagent_compositionality,sample_messages, levenshtein, input_distance
+from src.core.trainers import TrainerDialogMultiAgent, TrainerDialogMultiAgentPair
+from src.core.util import dump_multiagent_compositionality
 
 
 def get_params(params):
@@ -135,171 +134,17 @@ def get_params(params):
     # Asym learning
     parser.add_argument('--step_ratio', type=float, default=1,help='N_step_speaker/N_step_listener')
 
-    # Estimation
-    parser.add_argument('--agents_weights', type=str,help='Path to agent weights')
-    parser.add_argument('--dataset_split', type=str,help='Path to dataset split')
-    parser.add_argument('--n_sampling', type=int,help='Number of sampling iteration for estimation')
-    parser.add_argument('--by_position', type=bool,help='Measure entropy by position')
+    # MultiAgent
+    parser.add_argument('--N_speakers', type=int, default=1,help='Number agents')
+    parser.add_argument('--N_listeners', type=int, default=1,help='Number agents')
+    parser.add_argument('--compute_similarity', type=bool, default=False,help='Compute similarity')
+    parser.add_argument('--N_listener_sampled',type=int,default=1, help='Numbr of Listeners sampled at each step')
+    parser.add_argument('--save_probs',type=str,default=None, help='Save probs during inference')
+    parser.add_argument('--K_random',type=int,default=0, help='Save probs during inference')
 
     args = core.init(parser, params)
 
     return args
-
-def KL(a, b):
-    KL=0.
-    for i in range(len(a)):
-      if a[i]!=0 and b[i]!=0:
-        KL+=a[i]*np.log(a[i]/b[i])
-
-    return KL
-
-def estimate_policy(agents,
-                   compo_dataset,
-                   split,
-                   n_sampling,
-                   vocab_size,
-                   max_len,
-                   n_attributes,
-                   n_values,
-                   device,
-                   by_position=False):
-
-    """
-    Estimate agent (speaker module) policies based on message samples
-    """
-
-    dataset=[]
-    combination=[]
-
-    for i in range(len(compo_dataset)):
-        if i in split:
-          dataset.append(torch.from_numpy(compo_dataset[i]).float())
-          combination.append(np.reshape(compo_dataset[i],(n_attributes,n_values)).argmax(1))
-
-    dataset = [[torch.stack(dataset).to(device), None]]
-
-    policies={}
-
-    if by_position:
-
-        for agent in agents:
-            policies[agent]=np.zeros((len(split),max_len,vocab_size))
-        policies["mean_policy"]=np.zeros((len(split),max_len,vocab_size))
-
-        for _ in range(n_sampling):
-            idx=np.random.choice(len(agents))
-            agent=agents["agent_{}".format(idx)]
-            messages = sample_messages(agent,dataset,device)
-
-            for i,message in enumerate(messages):
-                for j,symbol in enumerate(message):
-                    policies["agent_{}".format(idx)][i,j,symbol]+=1/n_sampling
-                    policies["mean_policy"][i,j,symbol]+=1/n_sampling
-
-
-    else:
-
-        for agent in agents:
-            policies[agent]=[{} for i in range(len(split))]
-        policies["mean_policy"]=[{} for i in range(len(split))]
-
-        for _ in range(n_sampling):
-            idx=np.random.choice(len(agents))
-            agent=agents["agent_{}".format(idx)]
-            messages = sample_messages(agent,dataset,device)
-
-            for i,message in enumerate(messages):
-                message="".join([str(s.cpu().numpy()) for s in message])
-                # Individual policy
-                if message in policies["agent_{}".format(idx)][i]:
-                    policies["agent_{}".format(idx)][i][message]+=1/n_sampling
-                else:
-                    policies["agent_{}".format(idx)][i][message]=1/n_sampling
-
-                # Mean policy
-                if message in policies["mean_policy"][i]:
-                    policies["mean_policy"][i][message]+=1/n_sampling
-                else:
-                    policies["mean_policy"][i][message]=1/n_sampling
-
-    return policies
-
-def estimate_compositionality(agents,
-                               compo_dataset,
-                               split,
-                               n_sampling,
-                               n_indices,
-                               vocab_size,
-                               max_len,
-                               n_attributes,
-                               n_values,
-                               device,
-                               by_position=False):
-
-    """
-    Estimate agent (speaker module) policies based on message samples
-    """
-
-    BASE58 = '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'
-
-    dataset=[]
-    combination=[]
-
-    for i in range(len(compo_dataset)):
-        if i in split:
-          dataset.append(torch.from_numpy(compo_dataset[i]).float())
-          combination.append(np.reshape(compo_dataset[i],(n_attributes,n_values)).argmax(1))
-
-    dataset = [[torch.stack(dataset).to(device), None]]
-
-    agent_compositionality = []
-    input_space_distance = []
-    latent_space_distance = []
-
-    # 1. Sample messages
-    # 2. Select random pairs
-    # 3. Add input sim / latent sim to arrays
-
-    for agent_id in agents:
-
-        for _ in range(n_sampling):
-            agent=agents[agent_id]
-            messages = sample_messages(agent,dataset,device)
-
-            indices=np.reshape(np.random.randint(0,len(split),n_indices),(n_indices//2,2))
-
-            for k in range(len(indices)):
-
-                i=indices[k,0]
-                j=indices[k,1]
-
-                # Input space
-                input_space_distance.append(input_distance(combination[i],combination[j]))
-
-                # Latent space
-                s1=""
-                s2=""
-                message1=messages[i]
-                message2=messages[j]
-
-                for char1 in message1:
-                    if char1!=0 and char1!=-1:
-                        #s1+=str(char1)
-                        s1+=BASE58[int(char1)]
-
-                for char2 in message2:
-                    if char2!=0 and char2!=-1:
-                        #s2+=str(char2)
-                        s2+=BASE58[int(char2)]
-
-
-                latent_space_distance.append(levenshtein(s1,s2))
-
-
-
-        agent_compositionality.append(spearmanr(input_space_distance,latent_space_distance).correlation)
-
-    return agent_compositionality
 
 def fill_to_max_len(messages,max_len):
     lengths=[len(m) for m in messages]
@@ -419,140 +264,255 @@ def main(params):
 
     force_eos = opts.force_eos == 1
 
+    # Distribution of the inputs
+    if opts.probs=="uniform":
+        probs=[]
+        probs_by_att = np.ones(opts.n_values)
+        probs_by_att /= probs_by_att.sum()
+        for i in range(opts.n_attributes):
+            probs.append(probs_by_att)
+
+    if opts.probs=="entropy_test":
+        probs=[]
+        for i in range(opts.n_attributes):
+            probs_by_att = np.ones(opts.n_values)
+            probs_by_att[0]=1+(1*i)
+            probs_by_att /= probs_by_att.sum()
+            probs.append(probs_by_att)
+
+    if opts.probs_attributes=="uniform":
+        probs_attributes=[1]*opts.n_attributes
+
+    if opts.probs_attributes=="uniform_indep":
+        probs_attributes=[]
+        probs_attributes=[0.2]*opts.n_attributes
+
+    if opts.probs_attributes=="echelon":
+        probs_attributes=[]
+        for i in range(opts.n_attributes):
+            #probs_attributes.append(1.-(0.2)*i)
+            #probs_attributes.append(0.7+0.3/(i+1))
+            probs_attributes=[1.,0.95,0.9,0.85]
+
+    print("Probability by attribute is:",probs_attributes)
+
 
     compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
 
-    split = np.sort(np.load(opts.dataset_split))
+    if opts.split_proportion<1.:
+        train_split = np.random.RandomState(opts.random_seed).choice(opts.n_values**opts.n_attributes,size=(int(opts.split_proportion*(opts.n_values**opts.n_attributes))),replace=False)
+        test_split=[]
 
-    with open(opts.agents_weights, "rb") as fp:
-        agents_weights = pickle.load(fp)
+        for j in range(opts.n_values**opts.n_attributes):
+          if j not in train_split:
+            test_split.append(j)
+        test_split = np.array(test_split)
+
+    else:
+        train_split=test_split=np.arange(opts.n_values**opts.n_attributes)
+
+    train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
+                                                batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
+
+    # single batches with 1s on the diag
+    #test_loader = TestLoaderCompositionality(dataset=compo_dataset,n_values=opts.n_values,n_attributes=opts.n_attributes)
+    test_loader = TestLoaderCompositionality(dataset=compo_dataset,split=test_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
+                                            batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
 
 
     agents={}
+    optim_params={}
+    loss_weights={}
+    speaker_parameters={}
+    listener_parameters={}
 
-    for i in range(len(agents_weights)):
+    sender_hiddens=[]
+    receiver_hiddens=[]
 
+    for i in range(max(opts.N_speakers,opts.N_listeners)):
 
         agent=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
                                                 n_attributes=opts.n_attributes,
                                                 n_values=opts.n_values,
                                                 max_len=opts.max_len,
                                                 embed_dim=opts.sender_embedding,
-                                                sender_hidden_size=opts.sender_hidden,
-                                                receiver_hidden_size=opts.receiver_hidden,
+                                                sender_hidden_size=sender_hiddens[i],
+                                                receiver_hidden_size=receiver_hidden[i],
                                                 sender_cell=opts.sender_cell,
                                                 receiver_cell=opts.receiver_cell,
                                                 sender_num_layers=opts.sender_num_layers,
                                                 receiver_num_layers=opts.receiver_num_layers,
                                                 force_eos=force_eos)
 
-        agent.load_state_dict(torch.load(agents_weights[i],map_location=torch.device('cpu')))
-        agent.to(device)
         agents["agent_{}".format(i)] = agent
 
-        #(agent,compo_dataset,split,n_sampling,vocab_size,max_len,device)
+        optim_params["agent_{}".format(i)] = {"length_cost":0.,
+                                              "sender_entropy_coeff":opts.sender_entropy_coeff,
+                                              "receiver_entropy_coeff":opts.receiver_entropy_coeff}
 
-    if opts.by_position:
+        loss_weights["agent_{}".format(i)]= {"self":0.,"cross":1.,"imitation":0.}
 
-        policies = estimate_policy(agents=agents,
-                                   compo_dataset=compo_dataset,
-                                   split=split,
-                                   n_sampling=opts.n_sampling,
-                                   vocab_size=opts.vocab_size,
-                                   max_len=opts.max_len,
-                                   n_attributes=opts.n_attributes,
-                                   n_values=opts.n_values,
-                                   device=device,
-                                   by_position=True)
-
-        for agent in policies:
-            mean_entropy=0.
-            for i in range(np.shape(policies[agent])[0]):
-                for j in range(np.shape(policies[agent])[1]):
-                  probs=[policies[agent][i,j,k] for k in range(np.shape(policies[agent])[2])]
-                  mean_entropy+=entropy(probs,base=10)
-            mean_entropy/=(np.shape(policies[agent])[0]*np.shape(policies[agent])[1])
-
-            np.save(opts.dir_save+'/training_info/entropy_by_pos_{}.npy'.format(agent),np.array(mean_entropy))
-
-        KL_mat = np.zeros((len(policies)-1,len(policies)-1))
-        L2_mat = np.zeros((len(policies)-1,len(policies)-1))
-
-        for a1,agent_1 in enumerate(policies):
-            for a2,agent_2 in enumerate(policies):
-              if agent_1!="mean_policy" and agent_2!="mean_policy":
-                  mean_KL=0.
-                  mean_L2=0.
-                  for i in range(len(policies[agent_1])):
-                      for j in range(np.shape(policies[agent_1])[1]):
-                        probs_1=[policies[agent_1][i,j,k] for k in range(np.shape(policies[agent_1])[2])]
-                        probs_2=[policies[agent_2][i,j,k] for k in range(np.shape(policies[agent_2])[2])]
-                        mean_KL+=entropy(np.array(probs_1)+1e-16,qk=np.array(probs_2)+1e-16,base=10)
-                        mean_L2+=np.sqrt(np.sum((np.array(probs_1)-np.array(probs_2))**2))
-                  mean_KL/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
-                  mean_L2/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
-                  KL_mat[a1,a2]=mean_KL
-                  L2_mat[a1,a2]=mean_L2
-
-        np.save(opts.dir_save+'/training_info/KLdiv.npy',np.array(KL_mat))
-        np.save(opts.dir_save+'/training_info/L2.npy',np.array(L2_mat))
-
-        KL_mean_mat = np.zeros((len(policies)-1))
-        L2_mean_mat = np.zeros((len(policies)-1))
-
-        for a1,agent_1 in enumerate(policies):
-            for a2,agent_2 in enumerate(policies):
-              if agent_1=="mean_policy" and agent_2!="mean_policy":
-                  mean_KL=0.
-                  mean_L2=0.
-                  for i in range(len(policies[agent_1])):
-                      for j in range(np.shape(policies[agent_1])[1]):
-                        probs_1=[policies[agent_1][i,j,k] for k in range(np.shape(policies[agent_1])[2])]
-                        probs_2=[policies[agent_2][i,j,k] for k in range(np.shape(policies[agent_2])[2])]
-                        mean_KL+=entropy(np.array(probs_1)+1e-16,qk=np.array(probs_2)+1e-16,base=10)
-                        mean_L2+=np.sqrt(np.sum((np.array(probs_1)-np.array(probs_2))**2))
-                  mean_KL/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
-                  mean_L2/=(np.shape(policies[agent_1])[0]*np.shape(policies[agent_1])[1])
-                  KL_mean_mat[a2]=mean_KL
-                  L2_mean_mat[a2]=mean_L2
-
-        np.save(opts.dir_save+'/training_info/KLdiv_meanpol.npy',np.array(KL_mean_mat))
-        np.save(opts.dir_save+'/training_info/L2_meanpol.npy',np.array(L2_mean_mat))
+        if i<opts.N_speakers:
+            speaker_parameters["agent_{}".format(i)]=list(agent.agent_sender.parameters()) + \
+                                                       list(agent.sender_norm_h.parameters()) + \
+                                                       list(agent.sender_norm_c.parameters()) + \
+                                                       list(agent.hidden_to_output.parameters()) + \
+                                                       list(agent.sender_embedding.parameters()) + \
+                                                       list(agent.sender_cells.parameters())
 
 
+        if i<opts.N_listeners:
+            listener_parameters["agent_{}".format(i)]=list(agent.agent_receiver.parameters()) + \
+                                  list(agent.receiver_cell.parameters()) + \
+                                  list(agent.receiver_embedding.parameters())
+
+
+    game = DialogReinforceCompositionalityMultiAgent(Agents=agents,
+                                                    n_attributes=opts.n_attributes,
+                                                    n_values=opts.n_values,
+                                                    loss_understanding=loss_understanding_compositionality,
+                                                    optim_params=optim_params,
+                                                    baseline_mode=opts.baseline_mode,
+                                                    reward_mode=opts.reward_mode,
+                                                    loss_weights=loss_weights,
+                                                    device=device)
+
+    # Optimizers
+    optimizer_speaker={}
+    optimizer_listener={}
+
+    for i in range(max(opts.N_speakers,opts.N_listeners)):
+        if i<opts.N_speakers:
+            optimizer_speaker["agent_{}".format(i)] = core.build_optimizer(list(speaker_parameters["agent_{}".format(i)]),lr=opts.sender_lr)
+        if i<opts.N_listeners:
+            optimizer_listener["agent_{}".format(i)] = core.build_optimizer(list(listener_parameters["agent_{}".format(i)]),lr=opts.receiver_lr)
+
+
+    if opts.K_random:
+        Ks_speakers = [np.random.rand() for _ in range(opts.N_speakers)]
+        Ks_listeners = [np.random.rand() for _ in range(opts.N_listeners)]
     else:
-        policies = estimate_policy(agents=agents,
-                                   compo_dataset=compo_dataset,
-                                   split=split,
-                                   n_sampling=opts.n_sampling,
-                                   vocab_size=opts.vocab_size,
-                                   max_len=opts.max_len,
-                                   n_attributes=opts.n_attributes,
-                                   n_values=opts.n_values,
-                                   device=device)
+        Ks_speakers = [1]*opts.N_speakers
+        Ks_listeners = [1]*opts.N_listeners
 
-        for agent in policies:
-            mean_entropy=0.
-            for i in range(len(policies[agent])):
-              probs=[policies[agent][i][m] for m in policies[agent][i]]
-              mean_entropy+=entropy(probs,base=10)
-            mean_entropy/=len(policies[agent])
+    "Create trainer"
+    list_speakers=[i for i in range(opts.N_speakers)]
+    list_listeners=[i for i in range(opts.N_listeners)]
+    trainer = TrainerDialogMultiAgentPair(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
+                                                list_speakers=list_speakers,list_listeners=list_listeners,save_probs_eval=opts.save_probs,\
+                                                N_listener_sampled = opts.N_listener_sampled,step_ratio=opts.step_ratio,train_data=train_loader, \
+                                                Ks_speakers = Ks_speakers, Ks_listeners = Ks_listeners, \
+                                                validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
 
-            np.save(opts.dir_save+'/training_info/entropy_{}.npy'.format(agent),np.array(mean_entropy))
 
-    compositionality = estimate_compositionality(agents=agents,
-                                                   compo_dataset=compo_dataset,
-                                                   split=split,
-                                                   n_sampling=opts.n_sampling,
-                                                   n_indices = 1000,
-                                                   vocab_size=opts.vocab_size,
-                                                   max_len=opts.max_len,
-                                                   n_attributes=opts.n_attributes,
-                                                   n_values=opts.n_values,
-                                                   device=device)
+    # Create save dir
+    if not path.exists(opts.dir_save):
+        os.system("mkdir {}".format(opts.dir_save))
+        os.system("mkdir -p {}/models {}/training_info {}/messages {}/accuracy {}/test".format(opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save,opts.dir_save))
 
-    np.save(opts.dir_save+'/training_info/compositionality.npy',np.array(compositionality))
+    # Save train split
+    np.save(opts.dir_save+'/training_info/train_split.npy', train_split)
+    np.save(opts.dir_save+'/training_info/test_split.npy', test_split)
+    np.save(opts.dir_save+'/training_info/Ks_speakers.npy', Ks_speakers)
+    np.save(opts.dir_save+'/training_info/Ks_listeners.npy', Ks_listeners)
 
+
+
+    # Main losses
+    training_losses=[]
+    eval_losses=[]
+    training_entropy=[]
+    training_loss_cross=[]
+    eval_loss_cross=[]
+
+    for N in range(opts.N_speakers):
+
+        for epoch in range((N)*int(opts.n_epochs),(N+1)*int(opts.n_epochs)):
+
+            print("Epoch: "+str(epoch))
+            if epoch%10==0:
+                if opts.N_speakers<4:
+                    compute_similarity=True
+                else:
+                    compute_similarity=opts.compute_similarity
+            else:
+                compute_similarity=opts.compute_similarity
+
+            # Train
+
+            if N==0:
+                grad_update=[True,True]
+            else:
+                grad_update = [True,False]
+
+            list_train_loss,list_train_rest = trainer.train(n_epochs=1,pair=[0,N],grad_update=grad_update)
+
+            # Eval
+            eval_loss,eval_rest = trainer.eval()
+
+            # Store results
+            training_losses.append(list_train_loss[-1])
+            eval_losses.append(eval_loss)
+
+            training_entropy=[-1]*max(opts.N_speakers,opts.N_listeners)
+            training_loss_cross=[-1]*max(opts.N_speakers,opts.N_listeners)
+            eval_loss_cross=[-1]*max(opts.N_speakers,opts.N_listeners)
+
+            for i in range(max(opts.N_speakers,opts.N_listeners)):
+                if "sender_entropy_{}".format(i) in list_train_rest[-1]:
+                    training_entropy[i]=list_train_rest[-1]["sender_entropy_{}".format(i)]
+                if "loss_{}".format(i) in list_train_rest[-1]:
+                    training_loss_cross[i]=list_train_rest[-1]["loss_{}".format(i)]
+                if "loss_{}".format(i) in eval_rest:
+                    eval_loss_cross[i] = eval_rest["loss_{}".format(i)]
+
+            print("Train")
+            if epoch==0:
+                messages=[np.zeros((opts.n_values**opts.n_attributes,opts.max_len)) for _ in range(max(opts.N_speakers,opts.N_listeners))]
+            messages,accuracy_vectors, similarity_messages = dump_compositionality_multiagent(trainer.game,compo_dataset,train_split,list_speakers,list_listeners, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages,compute_similarity=compute_similarity)
+            np_messages = {agent:convert_messages_to_numpy(messages[agent]) for agent in messages}
+
+            print("Test")
+            if epoch==0:
+                messages_test=[np.zeros((opts.n_values**opts.n_attributes,opts.max_len)) for _ in range(max(opts.N_speakers,opts.N_listeners))]
+            messages_test,accuracy_vectors_test, similarity_messages_test = dump_compositionality_multiagent(trainer.game,compo_dataset,test_split,list_speakers,list_listeners, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages_test,compute_similarity=compute_similarity)
+            np_messages_test = {agent:convert_messages_to_numpy(messages_test[agent]) for agent in messages_test}
+
+            # Save models
+            if epoch%20==0:
+                for agent in agents:
+                    torch.save(agents[agent].state_dict(), f"{opts.dir_save}/models/{agent}_weights_{epoch}.pth")
+
+            # Save training info
+            if epoch%10==0:
+                np.save(opts.dir_save+'/training_info/training_loss_{}.npy'.format(epoch), training_losses)
+                np.save(opts.dir_save+'/training_info/eval_loss_{}.npy'.format(epoch), eval_losses)
+                np.save(opts.dir_save+'/training_info/training_entropy_{}.npy'.format(epoch), training_entropy)
+                np.save(opts.dir_save+'/training_info/training_loss_cross_{}.npy'.format(epoch), training_loss_cross)
+                np.save(opts.dir_save+'/training_info/eval_loss_cross_{}.npy'.format(epoch), eval_loss_cross)
+                np.save(opts.dir_save+'/training_info/similarity_languages_{}.npy'.format(epoch), similarity_messages)
+                np.save(opts.dir_save+'/training_info/similarity_languages_test_{}.npy'.format(epoch), similarity_messages_test)
+
+            # Save accuracy/message results
+            messages_to_be_saved = np.stack([fill_to_max_len(np_messages[agent],opts.max_len) for agent in np_messages])
+            accuracy_vectors_to_be_saved = np.zeros((len(list_speakers),len(list_listeners),len(train_split),opts.n_attributes))
+            for i,agent_speaker in enumerate(accuracy_vectors):
+                for j,agent_listener in enumerate(accuracy_vectors[agent_speaker]):
+                    accuracy_vectors_to_be_saved[i,j,:,:] = accuracy_vectors[agent_speaker][agent_listener]
+
+
+            np.save(opts.dir_save+'/messages/messages_{}.npy'.format(epoch), messages_to_be_saved)
+            np.save(opts.dir_save+'/accuracy/accuracy_{}.npy'.format(epoch), accuracy_vectors_to_be_saved)
+
+            # Test set
+            messages_test_to_be_saved = np.stack([fill_to_max_len(np_messages_test[agent],opts.max_len) for agent in np_messages_test])
+            accuracy_vectors_test_to_be_saved = np.zeros((len(list_speakers),len(list_listeners),len(test_split),opts.n_attributes))
+            for i,agent_speaker in enumerate(accuracy_vectors_test):
+                for j,agent_listener in enumerate(accuracy_vectors_test[agent_speaker]):
+                    accuracy_vectors_test_to_be_saved[i,j,:,:] = accuracy_vectors_test[agent_speaker][agent_listener]
+
+            np.save(opts.dir_save+'/test/messages_test_{}.npy'.format(epoch), messages_test_to_be_saved)
+            np.save(opts.dir_save+'/test/accuracy_test_{}.npy'.format(epoch), accuracy_vectors_test_to_be_saved)
 
     core.close()
 

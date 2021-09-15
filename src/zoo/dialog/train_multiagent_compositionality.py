@@ -6,6 +6,7 @@
 import json
 import argparse
 import numpy as np
+from scipy.stats import spearmanr
 import os
 from os import path
 import itertools
@@ -624,7 +625,7 @@ def main(params):
     np.save(opts.dir_save+'/training_info/test_split.npy', test_split)
     np.save(opts.dir_save+'/training_info/Ks_speakers.npy', Ks_speakers)
     np.save(opts.dir_save+'/training_info/Ks_listeners.npy', Ks_listeners)
-    
+
 
 
     # Main losses

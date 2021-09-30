@@ -337,7 +337,7 @@ def main(params):
                                                 max_len=opts.max_len,
                                                 embed_dim=opts.sender_embedding,
                                                 sender_hidden_size=sender_hiddens[i],
-                                                receiver_hidden_size=receiver_hidden[i],
+                                                receiver_hidden_size=receiver_hiddens[i],
                                                 sender_cell=opts.sender_cell,
                                                 receiver_cell=opts.receiver_cell,
                                                 sender_num_layers=opts.sender_num_layers,

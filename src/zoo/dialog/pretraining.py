@@ -326,8 +326,8 @@ def main(params):
     speaker_parameters={}
     listener_parameters={}
 
-    sender_hiddens=[]
-    receiver_hiddens=[]
+    sender_hiddens=[128,1024,512,256,128,64,32,16,8]
+    receiver_hiddens=[128,1024,512,256,128,64,32,16,8]
 
     for i in range(max(opts.N_speakers,opts.N_listeners)):
 

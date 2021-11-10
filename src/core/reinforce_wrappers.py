@@ -3297,6 +3297,91 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
 
 
+class ForwardPassSpeakerMultiAgent(nn.Module):
+
+    def __init__(self,
+                 Agents,
+                 n_attributes,
+                 n_values,
+                 loss_imitation,
+                 optim_params,
+                 message_to_imitate):
+        """
+        optim_params={"length_cost":0.,
+                      "sender_entropy_coeff_1":0.,
+                      "receiver_entropy_coeff_1":0.,
+                      "sender_entropy_coeff_2":0.,
+                      "receiver_entropy_coeff_2":0.}
+
+        loss_weights={"self":1.,
+                      "cross":1.,
+                      "imitation":1.,
+                      "length_regularization":0.,
+                      "entropy_regularization":1.}
+        """
+        super(ForwardPassSpeakerMultiAgent, self).__init__()
+        self.agents = Agents
+        self.n_attributes=n_attributes
+        self.n_values=n_values
+        self.optim_params = optim_params
+        self.loss_imitation = loss_imitation
+        self.loss_weights = loss_weights
+        self.baseline_mode=baseline_mode
+        self.reward_mode=reward_mode
+        self.message_to_imitate = message_to_imitate
+        self.mean_baseline = defaultdict(float)
+        self.n_points = defaultdict(float)
+        self.device=device
+        for agent in self.agents:
+          self.agents[agent].to(self.device)
+
+    def forward(self,
+                sender_input,
+                unused_labels,
+                sender_id,
+                receiver_ids,
+                receiver_input=None,
+                save_probs=None):
+
+        """
+        Inputs:
+        - direction : N means "N->0"
+        """
+
+        sender_input=sender_input.to(self.device)
+
+        "0. Get sender and receiver (id + optim info) for playing the game"
+        # Get sender_id and sender information
+        agent_sender = self.agents["agent_{}".format(sender_id)]
+        optim_params_sender = self.optim_params["agent_{}".format(sender_id)]
+
+        " 1. Agent actions and loss"
+        # Message sending
+        message, log_prob_s,whole_log_prob_s, entropy_s = agent_sender.send(sender_input,return_policies=True)
+        message_lengths = find_lengths(message)
+        message_to_imitate_lengths = find_lengths(self.message_to_imitate)
+
+        loss_imitation, rest_imitation = self.loss_imitation(self.message_to_imitate,whole_log_prob_s,self.message_to_imitate_lengths)
+
+        "6. Store results"
+        rest={}
+        rest['loss'] = loss_imitation.detach().item()
+        rest['loss_{}'.format(sender_id)] = loss_imitation.detach().item()
+        rest['mean_length_{}'.format(sender_id)] = message_lengths.float().mean().item()
+
+        "7. Save probs"
+        if save_probs:
+            np.save(save_probs+"_sender_input.npy",sender_input.cpu().numpy())
+            np.save(save_probs+"_message.npy",message.cpu().numpy())
+            np.save(save_probs+"_sender_probs.npy",whole_log_prob_s.cpu().numpy())
+
+        return optimized_loss, rest
+
+    def update_baseline(self, name, value):
+        self.n_points[name] += 1
+        self.mean_baseline[name] += (value.detach().mean().item() - self.mean_baseline[name]) / self.n_points[name]
+
+
 class DialogReinforceMemory(nn.Module):
 
     """

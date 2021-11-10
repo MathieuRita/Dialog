@@ -1,9 +1,9 @@
 `channel` is a Sender/Receiver game where a pair of agents is trained to 
 encode and decode (i.e. autoencode) a one-hot vector of a fixed dimension and transmit it over channels with different
 properties. The vectors to be auto-encoded might come from uniform, powerlaw or some specified
-distribution. The communication is performed by mean of variable-length messages; the training is done by Reinforce/GS. 
+distribution. The communication is performed by mean of variable-length messages; the training is done by Reinforce/GS.
 
-This code was used in the experiments of the following paper: 
+This code was used in the experiments of the following paper:
 * _Anti-efficient encoding in emergent communication._ Rahma Chaabouni, Eugene Kharitonov, Emmanuel Dupoux, Marco Baroni.
 [arxiv](https://arxiv.org/abs/1905.12561)
 
@@ -28,4 +28,12 @@ The game accepts the following game-specific parameters:
  lower, as Receiver has to adjust to the changes in Sender)
  * `mode={gs/rf}` -- training either via GS or Reinforce
  * `probs={p1,p2,...}` or `'probs=powerlaw'` select the prior distribution over concepts
- 
+
+
+
+
+["seed33_Nspeakers2_Nlisteners2_stepratio1_nattributes4_nvalues4_vocsize20_maxlen10_senderlr0.0005_receiverlr0.0005_entropycoef0.02_senderhidden512_receiverhidden512_epoch51",
+"seed32_Nspeakers2_Nlisteners2_stepratio1_nattributes4_nvalues4_vocsize20_maxlen10_senderlr0.0005_receiverlr0.0005_entropycoef0.02_senderhidden256_receiverhidden256_epoch51",
+"seed34_Nspeakers2_Nlisteners2_stepratio1_nattributes4_nvalues4_vocsize20_maxlen10_senderlr0.0005_receiverlr0.0005_entropycoef0.02_senderhidden64_receiverhidden64_epoch51",
+"seed42_Nspeakers2_Nlisteners2_stepratio1_nattributes4_nvalues4_vocsize20_maxlen10_senderlr0.0005_receiverlr0.0005_entropycoef0.02_senderhidden80_receiverhidden80_epoch91",
+"seed32_Nspeakers2_Nlisteners2_stepratio1_nattributes4_nvalues4_vocsize20_maxlen10_senderlr0.0005_receiverlr0.0005_entropycoef0.02_senderhidden128_receiverhidden128_epoch51"]

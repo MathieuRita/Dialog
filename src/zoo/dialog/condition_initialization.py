@@ -35,9 +35,11 @@ from src.core.trainers import CompoTrainer,TrainerDialogCompositionality,Trainer
 
 # MultiAgents
 from src.core.reinforce_wrappers import DialogReinforceCompositionalityMultiAgent
-from src.core.trainers import TrainerDialogMultiAgent
+from src.core.trainers import TrainerDialogMultiAgent, TrainerDialogMultiAgentPair
 from src.core.util import dump_multiagent_compositionality
 
+from src.core.reinforce_wrappers import ForwardPassSpeakerMultiAgent
+from src.core.trainers import TrainerInitMultiagent
 
 def get_params(params):
     parser = argparse.ArgumentParser()
@@ -164,6 +166,45 @@ def loss_understanding_compositionality(sender_input, receiver_output,n_attribut
 
     return loss, {'acc': crible_acc}
 
+def loss_message_imitation(message,prob_reconstruction,message_lengths):
+
+    # 1. len_mask selects only the symbols before EOS-token
+    if message_lengths is not None:
+        to_onehot=torch.eye(message.size(1)).to(message.device)
+        to_onehot=torch.cat((to_onehot,torch.zeros((1,message.size(1))).to(message.device)),0)
+        len_mask=[]
+        for i in range(message_lengths.size(0)):
+          len_mask.append(to_onehot[message_lengths[i]])
+        len_mask=torch.stack(len_mask,dim=0)
+
+        len_mask=torch.cumsum(len_mask,dim=1)
+        len_mask=torch.ones(len_mask.size()).to(message.device).add_(-len_mask)
+
+    # Reconstruction task
+    batch_size=message.size(0)
+    prob_reconstruction = prob_reconstruction.transpose(1,2)
+    prob_reconstruction = prob_reconstruction.reshape((prob_reconstruction.size(0)*prob_reconstruction.size(1),prob_reconstruction.size(2)))
+    message = message.reshape((message.size(0)*message.size(1)))
+
+    acc_imitation = (prob_reconstruction.argmax(dim=1) == message).detach().float()
+    loss_imitation = F.cross_entropy(torch.log(prob_reconstruction), message, reduction="none")
+
+    loss_imitation = loss_imitation.reshape((batch_size,loss_imitation.size(0)//batch_size))
+    acc_imitation = acc_imitation.reshape((batch_size,acc_imitation.size(0)//batch_size))
+
+    if message_lengths is not None:
+
+      loss_imitation = (loss_imitation*len_mask)/(len_mask.sum(1).unsqueeze(1)) # Add EOS mask
+      acc_imitation = (acc_imitation*len_mask)/(len_mask.sum(1).unsqueeze(1))
+
+      loss_imitation=loss_imitation.sum(1)
+      acc_imitation=acc_imitation.sum(1)
+    else:
+      loss_imitation = loss_imitation.mean(dim=1)
+      acc_imitation = acc_imitation.mean(dim=1)
+
+    return loss_imitation, {'acc_imitation':acc_imitation}
+
 def build_compo_dataset(n_values,n_attributes):
     one_hots = np.eye(n_values)
 
@@ -193,7 +234,7 @@ def dump_compositionality_multiagent(game,compo_dataset,split,list_speakers,list
     dataset = [[torch.stack(dataset).to(device), None]]
 
     sender_inputs, messages, _ , receiver_outputs,labels = \
-    dump_multiagent_compositionality(game, dataset,list_speakers,list_listeners, device=device, variable_length=True)
+        dump_multiagent_compositionality(game, dataset,list_speakers,list_listeners, device=device, variable_length=True)
     # Rq. sender_inputs = list, messages = dict , receiver_outputs = dict
 
     n_messages = len(dataset[0][0])
@@ -299,28 +340,17 @@ def main(params):
 
     compo_dataset = build_compo_dataset(opts.n_values, opts.n_attributes)
 
-    if not opts.OOD:
-        if opts.split_proportion<1.:
-            train_split = np.random.RandomState(opts.random_seed).choice(opts.n_values**opts.n_attributes,size=(int(opts.split_proportion*(opts.n_values**opts.n_attributes))),replace=False)
-            test_split=[]
+    if opts.split_proportion<1.:
+        train_split = np.random.RandomState(opts.random_seed).choice(opts.n_values**opts.n_attributes,size=(int(opts.split_proportion*(opts.n_values**opts.n_attributes))),replace=False)
+        test_split=[]
 
-            for j in range(opts.n_values**opts.n_attributes):
-              if j not in train_split:
-                test_split.append(j)
-            test_split = np.array(test_split)
+        for j in range(opts.n_values**opts.n_attributes):
+          if j not in train_split:
+            test_split.append(j)
+        test_split = np.array(test_split)
 
-        else:
-            train_split=test_split=np.arange(opts.n_values**opts.n_attributes)
     else:
-        val=np.arange(n_values)
-        combination=list(itertools.product(val,repeat=n_attributes))
-        train_split = []
-        test_split = []
-        for j,c in enumerate(combination):
-            if c[3]==3:
-                test_split.append(j)
-            else:
-                train_split.append(j)
+        train_split=test_split=np.arange(opts.n_values**opts.n_attributes)
 
     train_loader = OneHotLoaderCompositionality(dataset=compo_dataset,split=train_split,n_values=opts.n_values, n_attributes=opts.n_attributes, batch_size=opts.batch_size,
                                                 batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
@@ -331,98 +361,39 @@ def main(params):
                                             batches_per_epoch=opts.batches_per_epoch, probs=probs, probs_attributes=probs_attributes)
 
 
+    agents={}
+    optim_params={}
+    loss_weights={}
+    speaker_parameters={}
+    listener_parameters={}
 
-    "Create optimizers"
-    if opts.model=="2_speakers_1_listener":
+    sender_hiddens=[128,1024,512,256,128,64,32,16,8]
+    receiver_hiddens=[128,1024,512,256,128,64,32,16,8]
 
-        agent_1=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
+    for i in range(max(opts.N_speakers,opts.N_listeners)):
+
+        agent=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
                                                 n_attributes=opts.n_attributes,
                                                 n_values=opts.n_values,
                                                 max_len=opts.max_len,
                                                 embed_dim=opts.sender_embedding,
-                                                sender_hidden_size=opts.sender_hidden,
-                                                receiver_hidden_size=opts.receiver_hidden,
+                                                sender_hidden_size=sender_hiddens[i],
+                                                receiver_hidden_size=receiver_hiddens[i],
                                                 sender_cell=opts.sender_cell,
                                                 receiver_cell=opts.receiver_cell,
                                                 sender_num_layers=opts.sender_num_layers,
                                                 receiver_num_layers=opts.receiver_num_layers,
                                                 force_eos=force_eos)
 
-        agent_2=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
-                                                n_attributes=opts.n_attributes,
-                                                n_values=opts.n_values,
-                                                max_len=opts.max_len,
-                                                embed_dim=opts.sender_embedding,
-                                                sender_hidden_size=opts.sender_hidden,
-                                                receiver_hidden_size=opts.receiver_hidden,
-                                                sender_cell=opts.sender_cell,
-                                                receiver_cell=opts.receiver_cell,
-                                                sender_num_layers=opts.sender_num_layers,
-                                                receiver_num_layers=opts.receiver_num_layers,
-                                                force_eos=force_eos)
+        agents["agent_{}".format(i)] = agent
 
+        optim_params["agent_{}".format(i)] = {"length_cost":0.,
+                                              "sender_entropy_coeff":opts.sender_entropy_coeff,
+                                              "receiver_entropy_coeff":opts.receiver_entropy_coeff}
 
-        "Define game"
+        loss_weights["agent_{}".format(i)]= {"self":0.,"cross":1.,"imitation":0.}
 
-        optim_params={"length_cost":0.,
-                      "sender_entropy_coeff_1":opts.sender_entropy_coeff,
-                      "receiver_entropy_coeff_1":opts.receiver_entropy_coeff,
-                      "sender_entropy_coeff_2":opts.sender_entropy_coeff,
-                      "receiver_entropy_coeff_2":opts.receiver_entropy_coeff}
-
-        if opts.optim_mode=="cross":
-            loss_weights={"self":0.,"cross":1.,"imitation":0.}
-        elif opts.optim_mode=="cross+self":
-            loss_weights={"self":1.,"cross":1.,"imitation":0.}
-        else:
-            loss_weights={"self":1.,"cross":1.,"imitation":1.}
-        #loss_weights={"self":opts.self_weight,"cross":opts.cross_weight,"imitation":opts.imitation_weight}
-
-        game = DialogReinforceCompositionality(Agent_1=agent_1,
-                                                Agent_2=agent_2,
-                                                n_attributes=opts.n_attributes,
-                                                n_values=opts.n_values,
-                                                loss_understanding=loss_understanding_compositionality,
-                                                optim_params=optim_params,
-                                                baseline_mode=opts.baseline_mode,
-                                                reward_mode=opts.reward_mode,
-                                                loss_weights=loss_weights,
-                                                device=device)
-
-        optimizer = core.build_optimizer(list(game.parameters()))
-
-        trainer = TrainerDialogCompositionality(n_attributes=opts.n_attributes,n_values=opts.n_values,game=game, optimizer=optimizer, train_data=train_loader,
-                                                validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
-
-    elif opts.model=="N_speakers_1_listener":
-
-        agents={}
-        optim_params={}
-        loss_weights={}
-        speaker_parameters={}
-        listener_parameters={}
-
-        for i in range(opts.N_speakers):
-
-            agent=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
-                                                    n_attributes=opts.n_attributes,
-                                                    n_values=opts.n_values,
-                                                    max_len=opts.max_len,
-                                                    embed_dim=opts.sender_embedding,
-                                                    sender_hidden_size=opts.sender_hidden,
-                                                    receiver_hidden_size=opts.receiver_hidden,
-                                                    sender_cell=opts.sender_cell,
-                                                    receiver_cell=opts.receiver_cell,
-                                                    sender_num_layers=opts.sender_num_layers,
-                                                    receiver_num_layers=opts.receiver_num_layers,
-                                                    force_eos=force_eos)
-
-            agents["agent_{}".format(i)] = agent
-
-            optim_params["agent_{}".format(i)] = {"length_cost":0.,
-                                                  "sender_entropy_coeff":opts.sender_entropy_coeff,
-                                                  "receiver_entropy_coeff":opts.receiver_entropy_coeff}
-
+        if i<opts.N_speakers:
             speaker_parameters["agent_{}".format(i)]=list(agent.agent_sender.parameters()) + \
                                                        list(agent.sender_norm_h.parameters()) + \
                                                        list(agent.sender_norm_c.parameters()) + \
@@ -430,201 +401,63 @@ def main(params):
                                                        list(agent.sender_embedding.parameters()) + \
                                                        list(agent.sender_cells.parameters())
 
-            loss_weights["agent_{}".format(i)]= {"self":0.,"cross":1.,"imitation":0.}
 
-            if i==0:
-                listener_parameters["agent_{}".format(i)]=list(agent.agent_receiver.parameters()) + \
-                                      list(agent.receiver_cell.parameters()) + \
-                                      list(agent.receiver_embedding.parameters())
-
-
-        game = DialogReinforceCompositionalityMultiAgent(Agents=agents,
-                                                        n_attributes=opts.n_attributes,
-                                                        n_values=opts.n_values,
-                                                        loss_understanding=loss_understanding_compositionality,
-                                                        optim_params=optim_params,
-                                                        baseline_mode=opts.baseline_mode,
-                                                        reward_mode=opts.reward_mode,
-                                                        loss_weights=loss_weights,
-                                                        device=device)
-
-        # Optimizers
-        optimizer_speaker={}
-        optimizer_listener={}
-
-        for i in range(opts.N_speakers):
-            optimizer_speaker["agent_{}".format(i)] = core.build_optimizer(list(speaker_parameters["agent_{}".format(i)]),lr=opts.sender_lr)
-            if i==0:
-                optimizer_listener["agent_{}".format(i)] = core.build_optimizer(list(listener_parameters["agent_{}".format(i)]),lr=opts.receiver_lr)
+        if i<opts.N_listeners:
+            listener_parameters["agent_{}".format(i)]=list(agent.agent_receiver.parameters()) + \
+                                  list(agent.receiver_cell.parameters()) + \
+                                  list(agent.receiver_embedding.parameters())
 
 
-        "Create trainer"
-        list_speakers=[i for i in range(opts.N_speakers)]
-        list_listeners=[0]
-        trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
-                                        list_speakers=list_speakers,list_listeners=list_listeners,\
-                                        N_listener_sampled = 1,step_ratio=opts.step_ratio,train_data=train_loader, \
-                                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+    game_init = ForwardPassSpeakerMultiAgent(Agents=agents,
+                                        n_attributes=opts.n_attributes,
+                                        n_values=opts.n_values,
+                                        loss_imitation=loss_message_imitation,
+                                        optim_params=optim_params,
+                                        device=device)
 
-    elif opts.model=="2_speakers_N_listeners":
-
-        agents={}
-        optim_params={}
-        loss_weights={}
-        speaker_parameters={}
-        listener_parameters={}
-
-        for i in range(opts.N_listeners):
-
-            agent=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
+    game = DialogReinforceCompositionalityMultiAgent(Agents=agents,
                                                     n_attributes=opts.n_attributes,
                                                     n_values=opts.n_values,
-                                                    max_len=opts.max_len,
-                                                    embed_dim=opts.sender_embedding,
-                                                    sender_hidden_size=opts.sender_hidden,
-                                                    receiver_hidden_size=opts.receiver_hidden,
-                                                    sender_cell=opts.sender_cell,
-                                                    receiver_cell=opts.receiver_cell,
-                                                    sender_num_layers=opts.sender_num_layers,
-                                                    receiver_num_layers=opts.receiver_num_layers,
-                                                    force_eos=force_eos)
+                                                    loss_understanding=loss_understanding_compositionality,
+                                                    optim_params=optim_params,
+                                                    baseline_mode=opts.baseline_mode,
+                                                    reward_mode=opts.reward_mode,
+                                                    loss_weights=loss_weights,
+                                                    device=device)
 
-            agents["agent_{}".format(i)] = agent
+    # Optimizers
+    optimizer_speaker={}
+    optimizer_listener={}
 
-            optim_params["agent_{}".format(i)] = {"length_cost":0.,
-                                                  "sender_entropy_coeff":opts.sender_entropy_coeff,
-                                                  "receiver_entropy_coeff":opts.receiver_entropy_coeff}
-
-            if i==0 or i==1:
-                speaker_parameters["agent_{}".format(i)]=list(agent.agent_sender.parameters()) + \
-                                                           list(agent.sender_norm_h.parameters()) + \
-                                                           list(agent.sender_norm_c.parameters()) + \
-                                                           list(agent.hidden_to_output.parameters()) + \
-                                                           list(agent.sender_embedding.parameters()) + \
-                                                           list(agent.sender_cells.parameters())
-
-
-            loss_weights["agent_{}".format(i)]= {"self":0.,"cross":1.,"imitation":0.}
-
-            listener_parameters["agent_{}".format(i)]=list(agent.agent_receiver.parameters()) + \
-                                      list(agent.receiver_cell.parameters()) + \
-                                      list(agent.receiver_embedding.parameters())
-
-
-        game = DialogReinforceCompositionalityMultiAgent(Agents=agents,
-                                                        n_attributes=opts.n_attributes,
-                                                        n_values=opts.n_values,
-                                                        loss_understanding=loss_understanding_compositionality,
-                                                        optim_params=optim_params,
-                                                        baseline_mode=opts.baseline_mode,
-                                                        reward_mode=opts.reward_mode,
-                                                        loss_weights=loss_weights,
-                                                        device=device)
-
-        # Optimizers
-        optimizer_speaker={}
-        optimizer_listener={}
-
-        for i in range(opts.N_listeners):
-            if i==0 or i==1:
-                optimizer_speaker["agent_{}".format(i)] = core.build_optimizer(list(speaker_parameters["agent_{}".format(i)]),lr=opts.sender_lr)
+    for i in range(max(opts.N_speakers,opts.N_listeners)):
+        if i<opts.N_speakers:
+            optimizer_speaker["agent_{}".format(i)] = core.build_optimizer(list(speaker_parameters["agent_{}".format(i)]),lr=opts.sender_lr)
+        if i<opts.N_listeners:
             optimizer_listener["agent_{}".format(i)] = core.build_optimizer(list(listener_parameters["agent_{}".format(i)]),lr=opts.receiver_lr)
 
 
-        "Create trainer"
-        list_speakers=[0,1]
-        list_listeners=[i for i in range(opts.N_listeners)]
-        trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
-                                        list_speakers=list_speakers,list_listeners=list_listeners,\
-                                        N_listener_sampled = opts.N_listener_sampled,step_ratio=opts.step_ratio,train_data=train_loader, \
-                                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
-
-
-    elif opts.model=="N1_speakers_N2_listeners":
-
-        agents={}
-        optim_params={}
-        loss_weights={}
-        speaker_parameters={}
-        listener_parameters={}
-
-        for i in range(max(opts.N_speakers,opts.N_listeners)):
-
-            agent=AgentBaselineCompositionality(vocab_size=opts.vocab_size,
-                                                    n_attributes=opts.n_attributes,
-                                                    n_values=opts.n_values,
-                                                    max_len=opts.max_len,
-                                                    embed_dim=opts.sender_embedding,
-                                                    sender_hidden_size=opts.sender_hidden,
-                                                    receiver_hidden_size=opts.receiver_hidden,
-                                                    sender_cell=opts.sender_cell,
-                                                    receiver_cell=opts.receiver_cell,
-                                                    sender_num_layers=opts.sender_num_layers,
-                                                    receiver_num_layers=opts.receiver_num_layers,
-                                                    force_eos=force_eos)
-
-            agents["agent_{}".format(i)] = agent
-
-            optim_params["agent_{}".format(i)] = {"length_cost":0.,
-                                                  "sender_entropy_coeff":opts.sender_entropy_coeff,
-                                                  "receiver_entropy_coeff":opts.receiver_entropy_coeff}
-
-            loss_weights["agent_{}".format(i)]= {"self":0.,"cross":1.,"imitation":0.}
-
-            if i<opts.N_speakers:
-                speaker_parameters["agent_{}".format(i)]=list(agent.agent_sender.parameters()) + \
-                                                           list(agent.sender_norm_h.parameters()) + \
-                                                           list(agent.sender_norm_c.parameters()) + \
-                                                           list(agent.hidden_to_output.parameters()) + \
-                                                           list(agent.sender_embedding.parameters()) + \
-                                                           list(agent.sender_cells.parameters())
-
-
-            if i<opts.N_listeners:
-                listener_parameters["agent_{}".format(i)]=list(agent.agent_receiver.parameters()) + \
-                                      list(agent.receiver_cell.parameters()) + \
-                                      list(agent.receiver_embedding.parameters())
-
-
-        game = DialogReinforceCompositionalityMultiAgent(Agents=agents,
-                                                        n_attributes=opts.n_attributes,
-                                                        n_values=opts.n_values,
-                                                        loss_understanding=loss_understanding_compositionality,
-                                                        optim_params=optim_params,
-                                                        baseline_mode=opts.baseline_mode,
-                                                        reward_mode=opts.reward_mode,
-                                                        loss_weights=loss_weights,
-                                                        device=device)
-
-        # Optimizers
-        optimizer_speaker={}
-        optimizer_listener={}
-
-        for i in range(max(opts.N_speakers,opts.N_listeners)):
-            if i<opts.N_speakers:
-                optimizer_speaker["agent_{}".format(i)] = core.build_optimizer(list(speaker_parameters["agent_{}".format(i)]),lr=opts.sender_lr)
-            if i<opts.N_listeners:
-                optimizer_listener["agent_{}".format(i)] = core.build_optimizer(list(listener_parameters["agent_{}".format(i)]),lr=opts.receiver_lr)
-
-
-        if opts.K_random:
-            Ks_speakers = [np.random.rand() for _ in range(opts.N_speakers)]
-            Ks_listeners = [np.random.rand() for _ in range(opts.N_listeners)]
-        else:
-            Ks_speakers = [1]*opts.N_speakers
-            Ks_listeners = [1]*opts.N_listeners
-
-        "Create trainer"
-        list_speakers=[i for i in range(opts.N_speakers)]
-        list_listeners=[i for i in range(opts.N_listeners)]
-        trainer = TrainerDialogMultiAgent(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
-                                        list_speakers=list_speakers,list_listeners=list_listeners,save_probs_eval=opts.save_probs,\
-                                        N_listener_sampled = opts.N_listener_sampled,step_ratio=opts.step_ratio,train_data=train_loader, \
-                                        Ks_speakers = Ks_speakers, Ks_listeners = Ks_listeners, \
-                                        validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
-
+    if opts.K_random:
+        Ks_speakers = [np.random.rand() for _ in range(opts.N_speakers)]
+        Ks_listeners = [np.random.rand() for _ in range(opts.N_listeners)]
     else:
-        raise("Model not indicated")
+        Ks_speakers = [1]*opts.N_speakers
+        Ks_listeners = [1]*opts.N_listeners
+
+    "Create trainer"
+    list_speakers=[i for i in range(opts.N_speakers)]
+    list_listeners=[i for i in range(opts.N_listeners)]
+
+    trainer_init = TrainerInitMultiagent(game=game_init, optimizer_speaker=optimizer_speaker
+                                    list_speakers=list_speakers,save_probs_eval=opts.save_probs,\
+                                    train_data=train_loader, \
+                                    validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
+    trainer = TrainerDialogMultiAgentPair(game=game, optimizer_speaker=optimizer_speaker,optimizer_listener=optimizer_listener,\
+                                                list_speakers=list_speakers,list_listeners=list_listeners,save_probs_eval=opts.save_probs,\
+                                                N_listener_sampled = opts.N_listener_sampled,step_ratio=opts.step_ratio,train_data=train_loader, \
+                                                Ks_speakers = Ks_speakers, Ks_listeners = Ks_listeners, \
+                                                validation_data=test_loader, callbacks=[EarlyStopperAccuracy(opts.early_stopping_thr)])
+
 
     # Create save dir
     if not path.exists(opts.dir_save):
@@ -646,8 +479,7 @@ def main(params):
     training_loss_cross=[]
     eval_loss_cross=[]
 
-
-    for epoch in range(int(opts.n_epochs)):
+    for epoch in range(10):
 
         print("Epoch: "+str(epoch))
         if epoch%10==0:
@@ -659,6 +491,43 @@ def main(params):
             compute_similarity=opts.compute_similarity
 
         # Train
+
+        list_train_loss,list_train_rest = trainer_init.train(n_epochs=1)
+
+        # Eval
+        eval_loss,eval_rest = trainer.eval()
+
+        print("Train")
+        if epoch==0:
+            messages=[np.zeros((opts.n_values**opts.n_attributes,opts.max_len)) for _ in range(max(opts.N_speakers,opts.N_listeners))]
+        messages,accuracy_vectors, similarity_messages = dump_compositionality_multiagent(trainer.game,compo_dataset,train_split,list_speakers,list_listeners, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages,compute_similarity=compute_similarity)
+        np_messages = {agent:convert_messages_to_numpy(messages[agent]) for agent in messages}
+
+        print("Test")
+        if epoch==0:
+            messages_test=[np.zeros((opts.n_values**opts.n_attributes,opts.max_len)) for _ in range(max(opts.N_speakers,opts.N_listeners))]
+        messages_test,accuracy_vectors_test, similarity_messages_test = dump_compositionality_multiagent(trainer.game,compo_dataset,test_split,list_speakers,list_listeners, opts.n_attributes, opts.n_values, device,epoch,past_messages=messages_test,compute_similarity=compute_similarity)
+        np_messages_test = {agent:convert_messages_to_numpy(messages_test[agent]) for agent in messages_test}
+
+        # Save models
+        if epoch%20==0:
+            for agent in agents:
+                torch.save(agents[agent].state_dict(), f"{opts.dir_save}/models/{agent}_weights_{epoch}.pth")
+
+
+    for epoch in range(opts.n_epochs):
+
+        print("Epoch: "+str(epoch))
+        if epoch%10==0:
+            if opts.N_speakers<4:
+                compute_similarity=True
+            else:
+                compute_similarity=opts.compute_similarity
+        else:
+            compute_similarity=opts.compute_similarity
+
+        # Train
+
         list_train_loss,list_train_rest = trainer.train(n_epochs=1)
 
         # Eval

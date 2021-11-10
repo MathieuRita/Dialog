@@ -141,6 +141,7 @@ def get_params(params):
     parser.add_argument('--N_listener_sampled',type=int,default=1, help='Numbr of Listeners sampled at each step')
     parser.add_argument('--save_probs',type=str,default=None, help='Save probs during inference')
     parser.add_argument('--K_random',type=int,default=0, help='Save probs during inference')
+    parser.add_argument('--OOD',type=int,default=0, help='OOD spliting')
 
     args = core.init(parser, params)
 

@@ -644,7 +644,7 @@ def main(params):
     training_losses=[]
     eval_losses=[]
     training_entropy=[]
-    training_loss_cross=[]
+    training_loss_cross=[[]*max(opts.N_speakers,opts.N_listeners)]
     eval_loss_cross=[]
     training_losses_speaker=[]
 
@@ -679,7 +679,7 @@ def main(params):
             if "sender_entropy_{}".format(i) in list_train_rest[-1]:
                 training_entropy[i]=list_train_rest[-1]["sender_entropy_{}".format(i)]
             if "loss_{}".format(i) in list_train_rest[-1]:
-                training_loss_cross[i]=list_train_rest[-1]["loss_{}".format(i)]
+                training_loss_cross[i].append(list_train_rest[-1]["loss_{}".format(i)])
             if "loss_{}".format(i) in eval_rest:
                 eval_loss_cross[i] = eval_rest["loss_{}".format(i)]
 

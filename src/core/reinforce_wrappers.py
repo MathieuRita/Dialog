@@ -3258,7 +3258,8 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         policy_loss = loss_weights_sender["self"]*policy_loss_self + loss_weights_sender["cross"]*policy_loss_cross
         policy_loss /= (loss_weights_sender["self"]+loss_weights_sender["cross"])
 
-        optimized_loss = policy_length_loss + policy_loss - weighted_entropy
+        optimized_loss = policy_length_loss + policy_loss - weighted_entropy 
+        speaker_loss = optimized_loss.detach().item()
 
         # if the receiver is deterministic/differentiable, we apply the actual loss
         optimized_loss += loss.mean()
@@ -3271,6 +3272,7 @@ class DialogReinforceCompositionalityMultiAgent(nn.Module):
         "6. Store results"
         rest={}
         rest['loss'] = optimized_loss.detach().item()
+        rest['loss_speaker'] = speaker_loss
         rest['loss_{}'.format(sender_id)] = optimized_loss.detach().item()
         rest['sender_entropy_{}'.format(sender_id)] = entropy_s.mean().item()
         rest['mean_length_{}'.format(sender_id)] = message_lengths.float().mean().item()

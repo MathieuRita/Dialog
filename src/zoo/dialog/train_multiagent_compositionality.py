@@ -646,6 +646,7 @@ def main(params):
     training_entropy=[]
     training_loss_cross=[]
     eval_loss_cross=[]
+    training_losses_speaker=[]
 
 
     for epoch in range(int(opts.n_epochs)):
@@ -667,6 +668,7 @@ def main(params):
 
         # Store results
         training_losses.append(list_train_loss[-1])
+        training_losses_speaker.append(list_train_rest["loss_speaker"])
         eval_losses.append(eval_loss)
 
         training_entropy=[-1]*max(opts.N_speakers,opts.N_listeners)
@@ -700,6 +702,7 @@ def main(params):
 
         # Save training info
         if epoch%10==0:
+            np.save(opts.dir_save + '/training_info/training_loss_speaker_{}.npy'.format(epoch), training_losses_speaker)
             np.save(opts.dir_save+'/training_info/training_loss_{}.npy'.format(epoch), training_losses)
             np.save(opts.dir_save+'/training_info/eval_loss_{}.npy'.format(epoch), eval_losses)
             np.save(opts.dir_save+'/training_info/training_entropy_{}.npy'.format(epoch), training_entropy)

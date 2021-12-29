@@ -3720,7 +3720,7 @@ class TrainerDialogModel6:
 
 
 
-class TrainerDialogMultiAgent:
+class TrainerDialogMultiAgent2:
     """
     Implements the training logic. Some common configuration (checkpointing frequency, path, validation frequency)
     is done by checking util.common_opts that is set via the CL.

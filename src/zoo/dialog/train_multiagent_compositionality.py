@@ -672,7 +672,7 @@ def main(params):
         eval_losses.append(eval_loss)
 
         training_entropy=[-1]*max(opts.N_speakers,opts.N_listeners)
-        training_loss_cross=[-1]*max(opts.N_speakers,opts.N_listeners)
+        #training_loss_cross=[-1]*max(opts.N_speakers,opts.N_listeners)
         eval_loss_cross=[-1]*max(opts.N_speakers,opts.N_listeners)
 
         for i in range(max(opts.N_speakers,opts.N_listeners)):

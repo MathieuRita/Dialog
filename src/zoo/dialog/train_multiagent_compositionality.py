@@ -668,7 +668,7 @@ def main(params):
 
         # Store results
         training_losses.append(list_train_loss[-1])
-        training_losses_speaker.append(list_train_rest["loss_speaker"])
+        training_losses_speaker.append(list_train_rest[-1]["loss_speaker"])
         eval_losses.append(eval_loss)
 
         training_entropy=[-1]*max(opts.N_speakers,opts.N_listeners)
